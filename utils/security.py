@@ -5,6 +5,7 @@ from config import settings
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
+from database.connection import get_db
 
 def get_password_hash(password: str) -> str:
     """Criptografa a senha gerando um Salt aleatório."""
@@ -33,11 +34,9 @@ def create_access_token(data: dict):
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
-def get_current_user(token: str = Depends(oauth2_scheme)):
-    from database.connection import SessionLocal
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     from models.models import User
 
-    db = SessionLocal()
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Token inválido ou expirado",
@@ -49,13 +48,9 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
         email: str = payload.get("sub")
         if email is None:
             raise credentials_exception
-
-    except jwt.PyJWKError:
+    except Exception:
         raise credentials_exception
-    finally:
-        db.close()
 
-    db = SessionLocal()
     user = db.query(User).filter(User.email == email).first()
     if user is None:
         raise credentials_exception

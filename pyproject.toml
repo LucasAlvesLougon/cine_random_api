@@ -19,4 +19,5 @@ dependencies = [
     "requests>=2.34.2",
     "sqlalchemy>=2.0.52",
     "uvicorn>=0.52.4",
+    "websockets>=17.1",
 ]
