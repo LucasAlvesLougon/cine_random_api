@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from database.connection import engine, Base
-from routers import auth
+from routers import auth, movies
 import models.models
 
 Base.metadata.create_all(bind=engine)
@@ -12,6 +12,7 @@ app = FastAPI(
 )
 
 app.include_router(auth.router)
+app.include_router(movies.router)
 
 @app.get("/ping")
 def ping():
