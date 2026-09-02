@@ -53,4 +53,17 @@ class Movie(Base):
     trailerKey = Column(String)
 
     movie_list = relationship("MovieList", back_populates="movies")
+    comments = relationship("Comment", back_populates="movie", cascade="all, delete-orphan")
 
+class Comment(Base):
+    __tablename__ = "comments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    movie_id = Column(Integer, ForeignKey("movies.id"))
+    user_id = Column(String)  # Can be email or string id
+    user_name = Column(String)
+    text = Column(String)
+    rating = Column(Integer)
+    created_at = Column(String)
+
+    movie = relationship("Movie", back_populates="comments")

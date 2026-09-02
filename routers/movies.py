@@ -5,8 +5,8 @@ import asyncio
 
 from database.connection import get_db
 from sockets import manager
-from models.models import Movie, MovieList, User
-from schemas.schemas import MovieCreate, MovieResponse, MovieListCreate, MovieListResponse
+from models.models import Movie, MovieList, User, Comment
+from schemas.schemas import MovieCreate, MovieResponse, MovieListCreate, MovieListResponse, CommentCreate, CommentResponse
 from utils.security import get_current_user
 
 router = APIRouter(prefix="/lists", tags=["Listas de Filmes"])
@@ -131,6 +131,25 @@ Depends(get_current_user)):
     db.commit()
     background_tasks.add_task(manager.broadcast_refresh, list_code)
     return {"message": "Filme removido com sucesso"}
+@router.post("/movies/{movie_id}/comments", response_model=CommentResponse)
+def add_comment(movie_id: int, comment: CommentCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    from datetime import datetime
+    movie = db.query(Movie).filter(Movie.id == movie_id).first()
+    if not movie:
+        raise HTTPException(status_code=404, detail="Filme não encontrado.")
+    
+    new_comment = Comment(
+        **comment.model_dump(),
+        movie_id=movie_id,
+        created_at=datetime.utcnow().isoformat()
+    )
+    db.add(new_comment)
+    db.commit()
+    db.refresh(new_comment)
+    list_code = movie.movie_list.code
+    background_tasks.add_task(manager.broadcast_refresh, list_code)
+    return new_comment
+
 @router.websocket('/ws/{list_code}')
 async def websocket_endpoint(websocket: WebSocket, list_code: str):
     await manager.connect(websocket, list_code)

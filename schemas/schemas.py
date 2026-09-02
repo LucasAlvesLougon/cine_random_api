@@ -43,7 +43,23 @@ class MovieBase(BaseModel):
 class MovieCreate(MovieBase):
     pass
 
+class CommentBase(BaseModel):
+    user_id: str
+    user_name: str
+    text: str
+    rating: int
+
+class CommentCreate(CommentBase):
+    pass
+
+class CommentResponse(CommentBase):
+    id: int
+    movie_id: int
+    created_at: str
+    model_config = ConfigDict(from_attributes=True)
+
 class MovieResponse(MovieBase):
     id: int
     list_id: int
+    comments: List[CommentResponse] = []
     model_config = ConfigDict(from_attributes=True)
