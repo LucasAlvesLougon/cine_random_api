@@ -59,10 +59,11 @@ def login_with_google(req: GoogleAuthRequest, db: Session = Depends(get_db)):
     """Rota para processar o login via Google Oficial."""
     try:
         # Valida o token com a chave pública do Google
-        id_info = id_token.verify_oauth2_token(req.idToken, requests.Request())
+        CLIENT_ID = "844495701284-qvgpkr9446kr02dki8vs29191t1p33o7.apps.googleusercontent.com"
+        id_info = id_token.verify_oauth2_token(req.idToken, requests.Request(), CLIENT_ID)
         email = id_info.get("email")
-    except ValueError:
-        raise HTTPException(status_code=401, detail="Token do Google Inválido ou Expirado")
+    except ValueError as e:
+        raise HTTPException(status_code=401, detail=f"Token do Google Inválido: {str(e)}")
         
     if not email:
         raise HTTPException(status_code=400, detail="Conta do Google não tem email vinculado")

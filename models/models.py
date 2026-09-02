@@ -29,7 +29,7 @@ class MovieList(Base):
     owner_id = Column(Integer, ForeignKey("users.id"))
 
     owner = relationship("User", back_populates="lists")
-    movies = relationship("Movie", back_populates="movie_list", order_by="Movie.id")
+    movies = relationship("Movie", back_populates="movie_list", order_by="Movie.id.desc()")
     members = relationship("User", secondary=user_lists_association, back_populates="joined_lists")
 
 class Movie(Base):
