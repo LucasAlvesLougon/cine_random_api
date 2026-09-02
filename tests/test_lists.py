@@ -119,3 +119,15 @@ def test_add_and_get_draw_history(client, auth_headers):
     history_list = get_res.json()
     assert len(history_list) == 1
     assert history_list[0]["movie_title"] == "Interestelar"
+
+def test_get_list_members(client, auth_headers):
+    # Cria lista
+    client.post("/lists/", json={"name": "Amigos do Cinema", "code": "MBR01"}, headers=auth_headers)
+
+    # Consulta membros da lista
+    members_res = client.get("/lists/MBR01/members", headers=auth_headers)
+    assert members_res.status_code == 200
+    members = members_res.json()
+    assert len(members) >= 1
+    assert members[0]["email"] == "tester@example.com"
+    assert members[0]["is_owner"] is True

@@ -76,6 +76,16 @@ class MovieService:
         self.movie_repo.delete_list(db_list)
         return {"message": "Lista removida com sucesso"}
 
+    def get_list_members(self, list_code: str) -> List[dict]:
+        """Retorna todos os participantes da lista."""
+        db_list = self.movie_repo.get_list_by_code(list_code)
+        if not db_list:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Lista não encontrada."
+            )
+        return self.movie_repo.get_members_of_list(db_list)
+
     # --- Filmes ---
     def get_movies(self, list_code: str) -> List[Movie]:
         """Retorna todos os filmes de uma lista."""

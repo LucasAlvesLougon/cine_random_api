@@ -8,7 +8,7 @@ from models.models import User
 from schemas.schemas import (
     MovieCreate, MovieResponse, MovieListCreate,
     MovieListResponse, CommentCreate, CommentResponse,
-    DrawHistoryCreate, DrawHistoryResponse
+    DrawHistoryCreate, DrawHistoryResponse, MemberResponse
 )
 from services.movie_service import MovieService
 from utils.security import get_current_user
@@ -44,6 +44,12 @@ def delete_list(list_code: str, db: Session = Depends(get_db), current_user: Use
     """Remove uma lista (apenas o dono pode excluir)."""
     service = MovieService(db)
     return service.delete_list(list_code, current_user)
+
+@router.get("/{list_code}/members", response_model=List[MemberResponse])
+def get_list_members(list_code: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Retorna todos os participantes de uma lista com identificação do dono."""
+    service = MovieService(db)
+    return service.get_list_members(list_code)
 
 @router.get("/{list_code}/movies", response_model=List[MovieResponse])
 def get_movies(list_code: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):

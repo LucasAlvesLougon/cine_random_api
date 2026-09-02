@@ -48,6 +48,23 @@ class MovieRepository:
         self.db.refresh(movie_list)
         return movie_list
 
+    def get_members_of_list(self, movie_list: MovieList) -> List[dict]:
+        """Retorna todos os membros da lista identificando o dono."""
+        members = []
+        for user in movie_list.members:
+            members.append({
+                "id": user.id,
+                "email": user.email,
+                "is_owner": user.id == movie_list.owner_id
+            })
+        if movie_list.owner and not any(m["id"] == movie_list.owner.id for m in members):
+            members.insert(0, {
+                "id": movie_list.owner.id,
+                "email": movie_list.owner.email,
+                "is_owner": True
+            })
+        return members
+
     # --- Filmes ---
     def get_movie_by_id(self, movie_id: int) -> Optional[Movie]:
         """Busca um filme pelo id primário."""

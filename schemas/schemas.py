@@ -34,6 +34,12 @@ class MovieListResponse(MovieListBase):
     owner_id: Optional[int] = None
     model_config = ConfigDict(from_attributes=True)
 
+class MemberResponse(BaseModel):
+    id: int
+    email: str
+    is_owner: bool
+    model_config = ConfigDict(from_attributes=True)
+
 # --- FILMES ---
 class MovieBase(BaseModel):
     tmdbId: int
