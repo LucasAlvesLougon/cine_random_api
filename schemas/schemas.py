@@ -1,7 +1,7 @@
 from pydantic import BaseModel, ConfigDict
 from typing import List, Optional, Dict, Any
 
-# --- USERS ---
+# --- USERS & AUTH ---
 class UserBase(BaseModel):
     email: str
 
@@ -11,6 +11,15 @@ class UserCreate(UserBase):
 class UserResponse(UserBase):
     id: int
     model_config = ConfigDict(from_attributes=True)
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    email: Optional[str] = None
+
+class GoogleAuthRequest(BaseModel):
+    idToken: str
+
 
 # --- LISTAS ---
 class MovieListBase(BaseModel):

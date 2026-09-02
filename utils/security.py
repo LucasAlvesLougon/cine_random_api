@@ -35,7 +35,7 @@ def create_access_token(data: dict):
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
 def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    from models.models import User
+    from repositories.user_repository import UserRepository
 
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -51,8 +51,9 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     except Exception:
         raise credentials_exception
 
-    user = db.query(User).filter(User.email == email).first()
+    user_repo = UserRepository(db)
+    user = user_repo.get_by_email(email)
     if user is None:
         raise credentials_exception
 
-    return user
+    return user

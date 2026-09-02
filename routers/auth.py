@@ -1,11 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, status
 from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy.orm import Session
 
 from database.connection import get_db
-from models.models import User
-from schemas.schemas import UserCreate, UserResponse
-from utils.security import get_password_hash, verify_password, create_access_token
+from schemas.schemas import UserCreate, UserResponse, TokenResponse, GoogleAuthRequest
+from services.auth_service import AuthService
 
 router = APIRouter(
     prefix="/auth",
@@ -14,72 +13,19 @@ router = APIRouter(
 
 @router.post("/signup", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 def create_user(user: UserCreate, db: Session = Depends(get_db)):
-    """Cria um novo usuário no banco de dados."""
-    db_user = db.query(User).filter(User.email == user.email).first()
-    if db_user:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email já cadastrado.")
+    """Cria um novo usuário através da camada de serviço."""
+    auth_service = AuthService(db)
+    return auth_service.signup(user)
 
-    hashed_password = get_password_hash(user.password)
-    new_user = User(email=user.email, password_hash=hashed_password)
-
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
-
-    return new_user
-
-@router.post("/login")
+@router.post("/login", response_model=TokenResponse)
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     """Autentica o usuário e retorna um token JWT."""
-    user = db.query(User).filter(User.email == form_data.username).first()
+    auth_service = AuthService(db)
+    return auth_service.login(username=form_data.username, password=form_data.password)
 
-    # 2. Verifica se o usuário existe e se a senha bate com o Hash
-    if not user or not verify_password(form_data.password, user.password_hash):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Email ou senha incorretos.",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    # 3. Gera a "chave eletrônica" JWT
-    access_token = create_access_token(data={"sub": user.email})
-
-    return {"access_token": access_token, "token_type": "bearer"}
-
-from pydantic import BaseModel
-from google.oauth2 import id_token
-from google.auth.transport import requests
-
-class GoogleAuthRequest(BaseModel):
-    idToken: str
-
-# Estamos validando a assinatura diretamente com o Google Cloud Identity
-@router.post("/google")
+@router.post("/google", response_model=TokenResponse)
 def login_with_google(req: GoogleAuthRequest, db: Session = Depends(get_db)):
-    """Rota para processar o login via Google Oficial."""
-    try:
-        # Valida o token com a chave pública do Google
-        CLIENT_ID = "844495701284-qvgpkr9446kr02dki8vs29191t1p33o7.apps.googleusercontent.com"
-        id_info = id_token.verify_oauth2_token(req.idToken, requests.Request(), CLIENT_ID)
-        email = id_info.get("email")
-    except ValueError as e:
-        raise HTTPException(status_code=401, detail=f"Token do Google Inválido: {str(e)}")
-        
-    if not email:
-        raise HTTPException(status_code=400, detail="Conta do Google não tem email vinculado")
+    """Processa autenticação com Google Identity através do AuthService."""
+    auth_service = AuthService(db)
+    return auth_service.login_with_google(req.idToken)
 
-    # Verifica se esse email do Google já existe no nosso banco Postgres
-    user = db.query(User).filter(User.email == email).first()
-    
-    if not user:
-        # Se for o primeiro acesso, cria um usuário fantasma com senha hiper-segura aleatória
-        import secrets
-        hashed_password = get_password_hash(secrets.token_urlsafe(32))
-        user = User(email=email, password_hash=hashed_password)
-        db.add(user)
-        db.commit()
-        db.refresh(user)
-
-    # Devolve o nosso Token JWT (Para a nossa API)
-    access_token = create_access_token(data={"sub": user.email})
-    return {"access_token": access_token, "token_type": "bearer", "email": user.email}

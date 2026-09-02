@@ -1,0 +1,34 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [main, master, dev]
+  pull_request:
+    branches: [main, master, dev]
+
+jobs:
+  test:
+    name: Run Pytest Test Suite
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Install Dependencies
+        run: uv sync --frozen
+
+      - name: Run Automated Tests
+        run: uv run pytest -v
+        env:
+          SECRET_KEY: ${{ secrets.SECRET_KEY || 'ci_test_secret_key_super_secure_32_bytes_long_minimum' }}
+          DATABASE_URL: sqlite:///./ci_test.db
