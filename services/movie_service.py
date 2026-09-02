@@ -86,6 +86,36 @@ class MovieService:
             )
         return self.movie_repo.get_members_of_list(db_list)
 
+    def remove_list_member(self, list_code: str, user_id: int, current_user: User, background_tasks: BackgroundTasks) -> dict:
+        """Remove um participante da lista (apenas dono ou o próprio participante)."""
+        db_list = self.movie_repo.get_list_by_code(list_code)
+        if not db_list:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Lista não encontrada."
+            )
+        if db_list.owner_id != current_user.id and current_user.id != user_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Você não tem permissão para remover este participante."
+            )
+        if user_id == db_list.owner_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="O criador da lista não pode ser removido como participante."
+            )
+
+        target_user = next((u for u in db_list.members if u.id == user_id), None)
+        if not target_user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Participante não encontrado nesta lista."
+            )
+
+        self.movie_repo.remove_member_from_list(db_list, target_user)
+        background_tasks.add_task(manager.broadcast_refresh, list_code)
+        return {"message": "Participante removido com sucesso"}
+
     # --- Filmes ---
     def get_movies(self, list_code: str) -> List[Movie]:
         """Retorna todos os filmes de uma lista."""

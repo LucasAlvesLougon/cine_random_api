@@ -131,3 +131,34 @@ def test_get_list_members(client, auth_headers):
     assert len(members) >= 1
     assert members[0]["email"] == "tester@example.com"
     assert members[0]["is_owner"] is True
+
+def test_remove_list_member(client, auth_headers):
+    # Cria usuário 2
+    client.post("/auth/signup", json={"email": "member2@example.com", "password": "password123"})
+    login_res = client.post(
+        "/auth/login",
+        data={"username": "member2@example.com", "password": "password123"},
+        headers={"Content-Type": "application/x-www-form-urlencoded"}
+    )
+    token2 = login_res.json()["access_token"]
+    headers2 = {"Authorization": f"Bearer {token2}"}
+
+    # Cria lista com usuário 1
+    client.post("/lists/", json={"name": "Clube VIP", "code": "VIP01"}, headers=auth_headers)
+
+    # Usuário 2 entra na lista
+    join_res = client.post("/lists/join/VIP01", headers=headers2)
+    assert join_res.status_code == 200
+
+    # Verifica se há 2 membros
+    members_res = client.get("/lists/VIP01/members", headers=auth_headers)
+    assert len(members_res.json()) == 2
+    member2_id = next(m["id"] for m in members_res.json() if m["email"] == "member2@example.com")
+
+    # Usuário 1 (dono) remove usuário 2
+    del_res = client.delete(f"/lists/VIP01/members/{member2_id}", headers=auth_headers)
+    assert del_res.status_code == 200
+
+    # Verifica se agora só restou 1 membro
+    members_after = client.get("/lists/VIP01/members", headers=auth_headers)
+    assert len(members_after.json()) == 1

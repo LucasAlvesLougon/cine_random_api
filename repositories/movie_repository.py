@@ -65,6 +65,14 @@ class MovieRepository:
             })
         return members
 
+    def remove_member_from_list(self, movie_list: MovieList, user: User) -> MovieList:
+        """Remove um usuário da lista de membros."""
+        if user in movie_list.members:
+            movie_list.members.remove(user)
+            self.db.commit()
+            self.db.refresh(movie_list)
+        return movie_list
+
     # --- Filmes ---
     def get_movie_by_id(self, movie_id: int) -> Optional[Movie]:
         """Busca um filme pelo id primário."""

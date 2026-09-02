@@ -51,6 +51,12 @@ def get_list_members(list_code: str, db: Session = Depends(get_db), current_user
     service = MovieService(db)
     return service.get_list_members(list_code)
 
+@router.delete("/{list_code}/members/{user_id}")
+def remove_list_member(list_code: str, user_id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Remove um participante da lista (apenas dono ou o próprio membro)."""
+    service = MovieService(db)
+    return service.remove_list_member(list_code, user_id, current_user, background_tasks)
+
 @router.get("/{list_code}/movies", response_model=List[MovieResponse])
 def get_movies(list_code: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Retorna todos os filmes de uma lista."""
