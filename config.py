@@ -14,6 +14,7 @@ class Settings(BaseSettings):
         "https://cine-random.vercel.app",
     ]
     CORS_ORIGIN_REGEX: str = r"^https:\/\/.*\.vercel\.app$"
+    GOOGLE_CLIENT_ID: str = "844495701284-qvgpkr9446kr02dki8vs29191t1p33o7.apps.googleusercontent.com"
 
     @field_validator("SECRET_KEY")
     @classmethod
