@@ -3,8 +3,8 @@ from sqlalchemy.orm import Session
 from typing import List
 
 from repositories.movie_repository import MovieRepository
-from models.models import User, MovieList, Movie, Comment
-from schemas.schemas import MovieListCreate, MovieCreate, CommentCreate
+from models.models import User, MovieList, Movie, Comment, DrawHistory
+from schemas.schemas import MovieListCreate, MovieCreate, CommentCreate, DrawHistoryCreate
 from sockets import manager
 
 class MovieService:
@@ -149,3 +149,28 @@ class MovieService:
         list_code = movie.movie_list.code
         background_tasks.add_task(manager.broadcast_refresh, list_code)
         return new_comment
+
+    # --- Histórico de Sorteios ---
+    def add_draw_history(self, list_code: str, history: DrawHistoryCreate, background_tasks: BackgroundTasks) -> DrawHistory:
+        """Registra filme sorteado no histórico e dispara broadcast."""
+        db_list = self.movie_repo.get_list_by_code(list_code)
+        if not db_list:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Lista não encontrada."
+            )
+
+        new_entry = self.movie_repo.add_draw_history(db_list.id, history.model_dump())
+        background_tasks.add_task(manager.broadcast_refresh, list_code)
+        return new_entry
+
+    def get_draw_history(self, list_code: str, limit: int = 20) -> List[DrawHistory]:
+        """Retorna histórico de sorteios da lista."""
+        db_list = self.movie_repo.get_list_by_code(list_code)
+        if not db_list:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Lista não encontrada."
+            )
+
+        return self.movie_repo.get_draw_history(db_list.id, limit=limit)

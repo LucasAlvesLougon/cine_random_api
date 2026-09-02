@@ -67,3 +67,17 @@ class Comment(Base):
     created_at = Column(String)
 
     movie = relationship("Movie", back_populates="comments")
+
+class DrawHistory(Base):
+    __tablename__ = "draw_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    list_id = Column(Integer, ForeignKey("lists.id"))
+    movie_id = Column(Integer, ForeignKey("movies.id"), nullable=True)
+    movie_title = Column(String, nullable=False)
+    movie_poster = Column(String, nullable=True)
+    draw_type = Column(String, default="roulette")  # "roulette" ou "match"
+    drawn_by = Column(String, nullable=True)
+    drawn_at = Column(String)
+
+    movie_list = relationship("MovieList")

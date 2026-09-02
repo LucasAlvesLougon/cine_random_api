@@ -72,3 +72,20 @@ class MovieResponse(MovieBase):
     list_id: int
     comments: List[CommentResponse] = []
     model_config = ConfigDict(from_attributes=True)
+
+# --- HISTÓRICO DE SORTEIOS ---
+class DrawHistoryBase(BaseModel):
+    movie_id: Optional[int] = None
+    movie_title: str
+    movie_poster: Optional[str] = None
+    draw_type: str = "roulette"
+    drawn_by: Optional[str] = None
+
+class DrawHistoryCreate(DrawHistoryBase):
+    pass
+
+class DrawHistoryResponse(DrawHistoryBase):
+    id: int
+    list_id: int
+    drawn_at: str
+    model_config = ConfigDict(from_attributes=True)

@@ -94,3 +94,28 @@ def test_add_comment_and_rating(client, auth_headers):
     movie = movies_res.json()[0]
     assert len(movie["comments"]) == 1
     assert movie["comments"][0]["rating"] == 5
+
+def test_add_and_get_draw_history(client, auth_headers):
+    # Cria lista
+    client.post("/lists/", json={"name": "Sessão Pipoca", "code": "PIP01"}, headers=auth_headers)
+
+    # Registra sorteio no histórico
+    history_payload = {
+        "movie_title": "Interestelar",
+        "movie_poster": "https://image.tmdb.org/t/p/w500/interstellar.jpg",
+        "draw_type": "roulette",
+        "drawn_by": "test@example.com"
+    }
+    post_res = client.post("/lists/PIP01/history", json=history_payload, headers=auth_headers)
+    assert post_res.status_code == 200
+    history_data = post_res.json()
+    assert history_data["movie_title"] == "Interestelar"
+    assert history_data["draw_type"] == "roulette"
+    assert "drawn_at" in history_data
+
+    # Consulta histórico
+    get_res = client.get("/lists/PIP01/history", headers=auth_headers)
+    assert get_res.status_code == 200
+    history_list = get_res.json()
+    assert len(history_list) == 1
+    assert history_list[0]["movie_title"] == "Interestelar"

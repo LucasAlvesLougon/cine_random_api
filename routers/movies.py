@@ -7,7 +7,8 @@ from sockets import manager
 from models.models import User
 from schemas.schemas import (
     MovieCreate, MovieResponse, MovieListCreate,
-    MovieListResponse, CommentCreate, CommentResponse
+    MovieListResponse, CommentCreate, CommentResponse,
+    DrawHistoryCreate, DrawHistoryResponse
 )
 from services.movie_service import MovieService
 from utils.security import get_current_user
@@ -73,6 +74,18 @@ def add_comment(movie_id: int, comment: CommentCreate, background_tasks: Backgro
     """Adiciona um comentário ao filme."""
     service = MovieService(db)
     return service.add_comment(movie_id, comment, background_tasks)
+
+@router.post("/{list_code}/history", response_model=DrawHistoryResponse)
+def add_draw_history(list_code: str, history: DrawHistoryCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Registra um filme sorteado no histórico da lista."""
+    service = MovieService(db)
+    return service.add_draw_history(list_code, history, background_tasks)
+
+@router.get("/{list_code}/history", response_model=List[DrawHistoryResponse])
+def get_draw_history(list_code: str, limit: int = 20, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Retorna os últimos filmes sorteados na lista."""
+    service = MovieService(db)
+    return service.get_draw_history(list_code, limit=limit)
 
 @router.websocket('/ws/{list_code}')
 async def websocket_endpoint(websocket: WebSocket, list_code: str):

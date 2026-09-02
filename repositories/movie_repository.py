@@ -1,7 +1,7 @@
 from typing import List, Optional
 from sqlalchemy.orm import Session
 from datetime import datetime
-from models.models import Movie, MovieList, User, Comment
+from models.models import Movie, MovieList, User, Comment, DrawHistory
 
 class MovieRepository:
     def __init__(self, db: Session):
@@ -89,3 +89,20 @@ class MovieRepository:
         self.db.commit()
         self.db.refresh(new_comment)
         return new_comment
+
+    # --- Histórico de Sorteios ---
+    def add_draw_history(self, list_id: int, history_data: dict) -> DrawHistory:
+        """Adiciona um registro de filme sorteado ao histórico."""
+        new_entry = DrawHistory(
+            **history_data,
+            list_id=list_id,
+            drawn_at=datetime.utcnow().isoformat()
+        )
+        self.db.add(new_entry)
+        self.db.commit()
+        self.db.refresh(new_entry)
+        return new_entry
+
+    def get_draw_history(self, list_id: int, limit: int = 20) -> List[DrawHistory]:
+        """Retorna o histórico dos últimos filmes sorteados da lista."""
+        return self.db.query(DrawHistory).filter(DrawHistory.list_id == list_id).order_by(DrawHistory.id.desc()).limit(limit).all()
