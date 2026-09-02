@@ -64,3 +64,33 @@ def test_add_and_toggle_movie(client, auth_headers):
     # Verifica lista vazia
     movies_after_del = client.get("/lists/ACT001/movies", headers=auth_headers).json()
     assert len(movies_after_del) == 0
+
+def test_add_comment_and_rating(client, auth_headers):
+    # Cria lista e adiciona filme
+    client.post("/lists/", json={"name": "Cinema Clube", "code": "CLB01"}, headers=auth_headers)
+    movie_res = client.post(
+        "/lists/CLB01/movies",
+        json={"title": "Inception", "tmdbId": 27205, "releaseYear": "2010"},
+        headers=auth_headers
+    )
+    movie_id = movie_res.json()["id"]
+
+    # Adiciona comentário com nota
+    comment_payload = {
+        "user_id": "test@example.com",
+        "user_name": "Test User",
+        "text": "Obra de arte do Christopher Nolan!",
+        "rating": 5
+    }
+    comment_res = client.post(f"/lists/movies/{movie_id}/comments", json=comment_payload, headers=auth_headers)
+    assert comment_res.status_code == 200
+    comment_data = comment_res.json()
+    assert comment_data["text"] == "Obra de arte do Christopher Nolan!"
+    assert comment_data["rating"] == 5
+
+    # Verifica se o filme na lista traz o comentário
+    movies_res = client.get("/lists/CLB01/movies", headers=auth_headers)
+    assert movies_res.status_code == 200
+    movie = movies_res.json()[0]
+    assert len(movie["comments"]) == 1
+    assert movie["comments"][0]["rating"] == 5
