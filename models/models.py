@@ -36,9 +36,9 @@ class Movie(Base):
     __tablename__ = "movies"
 
     id = Column(Integer, primary_key=True, index=True)
-    list_id = Column(Integer, ForeignKey("lists.id"))
+    list_id = Column(Integer, ForeignKey("lists.id"), index=True)
 
-    # Dados extraÃ­dos do TMDB
+    # Dados extraídos do TMDB
     tmdbId = Column(Integer, index=True)
     title = Column(String, nullable=False)
     posterUrl = Column(String)
@@ -59,7 +59,7 @@ class Comment(Base):
     __tablename__ = "comments"
 
     id = Column(Integer, primary_key=True, index=True)
-    movie_id = Column(Integer, ForeignKey("movies.id"))
+    movie_id = Column(Integer, ForeignKey("movies.id"), index=True)
     user_id = Column(String)  # Can be email or string id
     user_name = Column(String)
     text = Column(String)
@@ -72,7 +72,7 @@ class DrawHistory(Base):
     __tablename__ = "draw_history"
 
     id = Column(Integer, primary_key=True, index=True)
-    list_id = Column(Integer, ForeignKey("lists.id"))
+    list_id = Column(Integer, ForeignKey("lists.id"), index=True)
     movie_id = Column(Integer, ForeignKey("movies.id"), nullable=True)
     movie_title = Column(String, nullable=False)
     movie_poster = Column(String, nullable=True)
