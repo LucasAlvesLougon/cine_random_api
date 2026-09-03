@@ -36,8 +36,11 @@ class MovieRepository:
         return movie_list
 
     def delete_list(self, movie_list: MovieList) -> None:
-        """Exclui todos os filmes vinculados e a lista."""
-        self.db.query(Movie).filter(Movie.list_id == movie_list.id).delete()
+        """Exclui com segurança a lista e todos os filmes, comentários, histórico e associações via cascade."""
+        # 1. Limpa associação de membros da lista
+        movie_list.members.clear()
+
+        # 2. Remove a lista (o cascade 'all, delete-orphan' remove filmes, comentários e draw_history em ordem)
         self.db.delete(movie_list)
         self.db.commit()
 
@@ -98,7 +101,12 @@ class MovieRepository:
         return movie
 
     def delete_movie(self, movie: Movie) -> None:
-        """Remove o filme do banco de dados."""
+        """Remove o filme com segurança, desvinculando do histórico de sorteios e limpando comentários."""
+        movie_id = movie.id
+        # Desvincula do histórico de sorteios para não violar Foreign Key
+        self.db.query(DrawHistory).filter(DrawHistory.movie_id == movie_id).update({"movie_id": None}, synchronize_session=False)
+        # Remove comentários do filme
+        self.db.query(Comment).filter(Comment.movie_id == movie_id).delete(synchronize_session=False)
         self.db.delete(movie)
         self.db.commit()
 

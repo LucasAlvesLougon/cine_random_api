@@ -25,12 +25,13 @@ class MovieList(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
-    code = Column(String, unique=True, index=True) # Ex: "teste123" que vocÃª usou no Front
+    code = Column(String, unique=True, index=True) # Ex: "teste123" que você usou no Front
     owner_id = Column(Integer, ForeignKey("users.id"))
 
     owner = relationship("User", back_populates="lists")
-    movies = relationship("Movie", back_populates="movie_list", order_by="Movie.id.desc()")
+    movies = relationship("Movie", back_populates="movie_list", cascade="all, delete-orphan", order_by="Movie.id.desc()")
     members = relationship("User", secondary=user_lists_association, back_populates="joined_lists")
+    draw_history = relationship("DrawHistory", back_populates="movie_list", cascade="all, delete-orphan")
 
 class Movie(Base):
     __tablename__ = "movies"
@@ -54,6 +55,7 @@ class Movie(Base):
 
     movie_list = relationship("MovieList", back_populates="movies")
     comments = relationship("Comment", back_populates="movie", cascade="all, delete-orphan")
+    draw_history = relationship("DrawHistory", back_populates="movie")
 
 class Comment(Base):
     __tablename__ = "comments"
@@ -80,4 +82,5 @@ class DrawHistory(Base):
     drawn_by = Column(String, nullable=True)
     drawn_at = Column(String)
 
-    movie_list = relationship("MovieList")
+    movie_list = relationship("MovieList", back_populates="draw_history")
+    movie = relationship("Movie", back_populates="draw_history")

@@ -277,3 +277,58 @@ def test_websocket_authentication_and_authorization(client, auth_headers):
     with client.websocket_connect(f"/lists/ws/WS001?token={token1}") as ws:
         assert ws is not None
 
+def test_delete_list_with_all_relationships(client, auth_headers):
+    # 1. Cria lista
+    res_list = client.post("/lists/", json={"name": "Lista Completa Para Deletar", "code": "DELFULL01"}, headers=auth_headers)
+    assert res_list.status_code == 200
+
+    # 2. Adiciona participante/membro
+    client.post("/auth/signup", json={"email": "member_del@example.com", "password": "password123"})
+    login_member = client.post(
+        "/auth/login",
+        data={"username": "member_del@example.com", "password": "password123"},
+        headers={"Content-Type": "application/x-www-form-urlencoded"}
+    )
+    member_token = login_member.json()["access_token"]
+    member_headers = {"Authorization": f"Bearer {member_token}"}
+    client.post("/lists/join/DELFULL01", headers=member_headers)
+
+    # 3. Adiciona filme
+    res_movie = client.post(
+        "/lists/DELFULL01/movies",
+        json={"title": "O Poderoso Chefão", "tmdbId": 238, "releaseYear": "1972"},
+        headers=auth_headers
+    )
+    assert res_movie.status_code == 200
+    movie_id = res_movie.json()["id"]
+
+    # 4. Adiciona comentário no filme
+    res_comm = client.post(
+        f"/lists/movies/{movie_id}/comments",
+        json={"user_id": "1", "user_name": "Tester", "text": "Obra de arte absoluta!", "rating": 5},
+        headers=auth_headers
+    )
+    assert res_comm.status_code == 200
+
+    # 5. Registra sorteio no histórico
+    res_hist = client.post(
+        "/lists/DELFULL01/history",
+        json={
+            "movie_id": movie_id,
+            "movie_title": "O Poderoso Chefão",
+            "draw_type": "roulette"
+        },
+        headers=auth_headers
+    )
+    assert res_hist.status_code == 200
+
+    # 6. Deleta a lista inteira (dono) -> deve deletar sem erro 500
+    del_list_res = client.delete("/lists/DELFULL01", headers=auth_headers)
+    assert del_list_res.status_code == 200
+    assert del_list_res.json()["message"] == "Lista removida com sucesso"
+
+    # 7. Verifica que a lista não existe mais
+    check_res = client.get("/lists/DELFULL01/movies", headers=auth_headers)
+    assert check_res.status_code == 404
+
+
