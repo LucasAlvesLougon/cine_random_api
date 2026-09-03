@@ -6,6 +6,7 @@ from repositories.movie_repository import MovieRepository
 from models.models import User, MovieList, Movie, Comment, DrawHistory
 from schemas.schemas import MovieListCreate, MovieCreate, CommentCreate, DrawHistoryCreate
 from sockets import manager
+from utils.cache import cache
 
 class MovieService:
     def __init__(self, db: Session):
@@ -13,11 +14,18 @@ class MovieService:
 
     # --- Listas ---
     def get_my_lists(self, current_user: User) -> List[MovieList]:
-        """Retorna todas as listas associadas ao usuário."""
-        return self.movie_repo.get_lists_for_user(current_user)
+        """Retorna todas as listas associadas ao usuário com cache in-memory."""
+        cache_key = f"user_lists:{current_user.id}"
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        lists = self.movie_repo.get_lists_for_user(current_user)
+        cache.set(cache_key, lists, ttl=120)
+        return lists
 
     def join_list(self, list_code: str, current_user: User) -> MovieList:
-        """Entra em uma lista existente pelo código."""
+        """Entra em uma lista existente pelo código e invalida caches."""
         db_list = self.movie_repo.get_list_by_code(list_code)
         if not db_list:
             raise HTTPException(
@@ -30,10 +38,13 @@ class MovieService:
                 detail="Você já está nesta lista."
             )
 
-        return self.movie_repo.add_member_to_list(db_list, current_user)
+        updated_list = self.movie_repo.add_member_to_list(db_list, current_user)
+        cache.delete(f"members:{list_code}")
+        cache.delete_prefix("user_lists:")
+        return updated_list
 
     def create_list(self, lista: MovieListCreate, current_user: User) -> MovieList:
-        """Cria uma nova lista para o usuário logado."""
+        """Cria uma nova lista para o usuário logado e invalida cache."""
         db_list = self.movie_repo.get_list_by_code(lista.code)
         if db_list:
             raise HTTPException(
@@ -41,10 +52,12 @@ class MovieService:
                 detail="Código de lista já está em uso."
             )
 
-        return self.movie_repo.create_list(name=lista.name, code=lista.code, owner=current_user)
+        new_list = self.movie_repo.create_list(name=lista.name, code=lista.code, owner=current_user)
+        cache.delete(f"user_lists:{current_user.id}")
+        return new_list
 
     def update_list(self, list_code: str, list_data: MovieListCreate, current_user: User) -> MovieList:
-        """Atualiza o nome da lista com validação de permissão."""
+        """Atualiza o nome da lista com validação de permissão e invalida cache."""
         db_list = self.movie_repo.get_list_by_code(list_code)
         if not db_list:
             raise HTTPException(
@@ -57,10 +70,12 @@ class MovieService:
                 detail="Somente o dono pode alterar o nome da lista."
             )
 
-        return self.movie_repo.update_list_name(db_list, list_data.name)
+        updated_list = self.movie_repo.update_list_name(db_list, list_data.name)
+        cache.delete_prefix("user_lists:")
+        return updated_list
 
     def delete_list(self, list_code: str, current_user: User) -> dict:
-        """Remove a lista e seus filmes (apenas dono)."""
+        """Remove a lista e seus filmes (apenas dono) e limpa os caches."""
         db_list = self.movie_repo.get_list_by_code(list_code)
         if not db_list:
             raise HTTPException(
@@ -74,20 +89,31 @@ class MovieService:
             )
 
         self.movie_repo.delete_list(db_list)
+        cache.delete_prefix(f"movies:{list_code}")
+        cache.delete_prefix(f"members:{list_code}")
+        cache.delete_prefix(f"history:{list_code}")
+        cache.delete_prefix("user_lists:")
         return {"message": "Lista removida com sucesso"}
 
     def get_list_members(self, list_code: str) -> List[dict]:
-        """Retorna todos os participantes da lista."""
+        """Retorna todos os participantes da lista com cache."""
+        cache_key = f"members:{list_code}"
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return cached
+
         db_list = self.movie_repo.get_list_by_code(list_code)
         if not db_list:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Lista não encontrada."
             )
-        return self.movie_repo.get_members_of_list(db_list)
+        members = self.movie_repo.get_members_of_list(db_list)
+        cache.set(cache_key, members, ttl=180)
+        return members
 
     def remove_list_member(self, list_code: str, user_id: int, current_user: User, background_tasks: BackgroundTasks) -> dict:
-        """Remove um participante da lista (apenas dono ou o próprio participante)."""
+        """Remove um participante da lista e invalida cache."""
         db_list = self.movie_repo.get_list_by_code(list_code)
         if not db_list:
             raise HTTPException(
@@ -113,22 +139,31 @@ class MovieService:
             )
 
         self.movie_repo.remove_member_from_list(db_list, target_user)
+        cache.delete(f"members:{list_code}")
+        cache.delete_prefix("user_lists:")
         background_tasks.add_task(manager.broadcast_refresh, list_code)
         return {"message": "Participante removido com sucesso"}
 
     # --- Filmes ---
     def get_movies(self, list_code: str) -> List[Movie]:
-        """Retorna todos os filmes de uma lista."""
+        """Retorna todos os filmes de uma lista com cache in-memory."""
+        cache_key = f"movies:{list_code}"
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return cached
+
         db_list = self.movie_repo.get_list_by_code(list_code)
         if not db_list:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Lista não encontrada."
             )
-        return db_list.movies
+        movies = db_list.movies
+        cache.set(cache_key, movies, ttl=180)
+        return movies
 
     def add_movie(self, list_code: str, movie: MovieCreate, background_tasks: BackgroundTasks) -> Movie:
-        """Adiciona um filme validando duplicidade e disparando broadcast."""
+        """Adiciona um filme validando duplicidade, invalidando cache e disparando broadcast."""
         db_list = self.movie_repo.get_list_by_code(list_code)
         if not db_list:
             raise HTTPException(
@@ -144,11 +179,12 @@ class MovieService:
             )
 
         new_movie = self.movie_repo.create_movie(db_list.id, movie.model_dump())
+        cache.delete(f"movies:{list_code}")
         background_tasks.add_task(manager.broadcast_refresh, list_code)
         return new_movie
 
     def toggle_watched(self, movie_id: int, background_tasks: BackgroundTasks) -> Movie:
-        """Inverte o status assistido do filme e notifica clientes via WebSocket."""
+        """Inverte o status assistido do filme, invalida cache e notifica clientes via WebSocket."""
         movie = self.movie_repo.get_movie_by_id(movie_id)
         if not movie:
             raise HTTPException(
@@ -158,11 +194,12 @@ class MovieService:
 
         updated_movie = self.movie_repo.toggle_movie_watched(movie)
         list_code = updated_movie.movie_list.code
+        cache.delete(f"movies:{list_code}")
         background_tasks.add_task(manager.broadcast_refresh, list_code)
         return updated_movie
 
     def delete_movie(self, movie_id: int, background_tasks: BackgroundTasks) -> dict:
-        """Remove o filme e notifica clientes via WebSocket."""
+        """Remove o filme, invalida cache e notifica clientes via WebSocket."""
         movie = self.movie_repo.get_movie_by_id(movie_id)
         if not movie:
             raise HTTPException(
@@ -172,12 +209,13 @@ class MovieService:
 
         list_code = movie.movie_list.code
         self.movie_repo.delete_movie(movie)
+        cache.delete(f"movies:{list_code}")
         background_tasks.add_task(manager.broadcast_refresh, list_code)
         return {"message": "Filme removido com sucesso"}
 
     # --- Comentários ---
     def add_comment(self, movie_id: int, comment: CommentCreate, background_tasks: BackgroundTasks) -> Comment:
-        """Adiciona comentário e notifica a sala via WebSocket."""
+        """Adiciona comentário, invalida cache e notifica a sala via WebSocket."""
         movie = self.movie_repo.get_movie_by_id(movie_id)
         if not movie:
             raise HTTPException(
@@ -187,12 +225,13 @@ class MovieService:
 
         new_comment = self.movie_repo.add_comment(movie_id, comment.model_dump())
         list_code = movie.movie_list.code
+        cache.delete(f"movies:{list_code}")
         background_tasks.add_task(manager.broadcast_refresh, list_code)
         return new_comment
 
     # --- Histórico de Sorteios ---
     def add_draw_history(self, list_code: str, history: DrawHistoryCreate, background_tasks: BackgroundTasks) -> DrawHistory:
-        """Registra filme sorteado no histórico e dispara broadcast."""
+        """Registra filme sorteado no histórico, invalida cache e dispara broadcast."""
         db_list = self.movie_repo.get_list_by_code(list_code)
         if not db_list:
             raise HTTPException(
@@ -201,11 +240,17 @@ class MovieService:
             )
 
         new_entry = self.movie_repo.add_draw_history(db_list.id, history.model_dump())
+        cache.delete_prefix(f"history:{list_code}")
         background_tasks.add_task(manager.broadcast_refresh, list_code)
         return new_entry
 
     def get_draw_history(self, list_code: str, limit: int = 20) -> List[DrawHistory]:
-        """Retorna histórico de sorteios da lista."""
+        """Retorna histórico de sorteios da lista com cache in-memory."""
+        cache_key = f"history:{list_code}:{limit}"
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return cached
+
         db_list = self.movie_repo.get_list_by_code(list_code)
         if not db_list:
             raise HTTPException(
@@ -213,4 +258,6 @@ class MovieService:
                 detail="Lista não encontrada."
             )
 
-        return self.movie_repo.get_draw_history(db_list.id, limit=limit)
+        history = self.movie_repo.get_draw_history(db_list.id, limit=limit)
+        cache.set(cache_key, history, ttl=180)
+        return history
