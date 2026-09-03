@@ -6,6 +6,7 @@ from sqlalchemy.pool import StaticPool
 
 from database.connection import Base, get_db
 from main import app
+from utils.rate_limit import limiter
 import models.models
 
 # Banco SQLite em memória isolado para testes
@@ -20,10 +21,12 @@ TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engin
 
 @pytest.fixture(autouse=True)
 def setup_database():
-    """Recria as tabelas do banco antes de cada teste."""
+    """Recria as tabelas do banco e limpa rate limiters antes de cada teste."""
+    limiter.clear()
     Base.metadata.create_all(bind=engine_test)
     yield
     Base.metadata.drop_all(bind=engine_test)
+    limiter.clear()
 
 @pytest.fixture
 def db_session():

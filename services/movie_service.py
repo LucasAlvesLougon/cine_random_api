@@ -95,19 +95,39 @@ class MovieService:
         cache.delete_prefix("user_lists:")
         return {"message": "Lista removida com sucesso"}
 
-    def get_list_members(self, list_code: str) -> List[dict]:
-        """Retorna todos os participantes da lista com cache."""
-        cache_key = f"members:{list_code}"
-        cached = cache.get(cache_key)
-        if cached is not None:
-            return cached
-
-        db_list = self.movie_repo.get_list_by_code(list_code)
+    def _verify_list_access(self, db_list: MovieList, current_user: User, require_owner: bool = False) -> None:
+        """Verifica se o usuário pertence à lista ou é o proprietário (mitigação BOLA/IDOR)."""
         if not db_list:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Lista não encontrada."
             )
+
+        is_owner = db_list.owner_id == current_user.id
+        is_member = any(m.id == current_user.id for m in db_list.members)
+
+        if require_owner and not is_owner:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Apenas o criador da lista tem permissão para esta ação."
+            )
+
+        if not (is_owner or is_member):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Você não possui permissão para acessar ou modificar esta lista."
+            )
+
+    def get_list_members(self, list_code: str, current_user: User) -> List[dict]:
+        """Retorna todos os participantes da lista com validação de permissão e cache."""
+        db_list = self.movie_repo.get_list_by_code(list_code)
+        self._verify_list_access(db_list, current_user)
+
+        cache_key = f"members:{list_code}"
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return cached
+
         members = self.movie_repo.get_members_of_list(db_list)
         cache.set(cache_key, members, ttl=180)
         return members
@@ -115,11 +135,8 @@ class MovieService:
     def remove_list_member(self, list_code: str, user_id: int, current_user: User, background_tasks: BackgroundTasks) -> dict:
         """Remove um participante da lista e invalida cache."""
         db_list = self.movie_repo.get_list_by_code(list_code)
-        if not db_list:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Lista não encontrada."
-            )
+        self._verify_list_access(db_list, current_user)
+
         if db_list.owner_id != current_user.id and current_user.id != user_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -145,31 +162,24 @@ class MovieService:
         return {"message": "Participante removido com sucesso"}
 
     # --- Filmes ---
-    def get_movies(self, list_code: str) -> List[Movie]:
-        """Retorna todos os filmes de uma lista com cache in-memory."""
+    def get_movies(self, list_code: str, current_user: User) -> List[Movie]:
+        """Retorna todos os filmes de uma lista com validação de permissão e cache in-memory."""
+        db_list = self.movie_repo.get_list_by_code(list_code)
+        self._verify_list_access(db_list, current_user)
+
         cache_key = f"movies:{list_code}"
         cached = cache.get(cache_key)
         if cached is not None:
             return cached
 
-        db_list = self.movie_repo.get_list_by_code(list_code)
-        if not db_list:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Lista não encontrada."
-            )
         movies = db_list.movies
         cache.set(cache_key, movies, ttl=180)
         return movies
 
-    def add_movie(self, list_code: str, movie: MovieCreate, background_tasks: BackgroundTasks) -> Movie:
-        """Adiciona um filme validando duplicidade, invalidando cache e disparando broadcast."""
+    def add_movie(self, list_code: str, movie: MovieCreate, current_user: User, background_tasks: BackgroundTasks) -> Movie:
+        """Adiciona um filme validando permissão de lista, duplicidade, invalidando cache e disparando broadcast."""
         db_list = self.movie_repo.get_list_by_code(list_code)
-        if not db_list:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Lista não encontrada."
-            )
+        self._verify_list_access(db_list, current_user)
 
         db_movie = self.movie_repo.get_movie_in_list_by_tmdb_id(db_list.id, movie.tmdbId)
         if db_movie:
@@ -183,14 +193,16 @@ class MovieService:
         background_tasks.add_task(manager.broadcast_refresh, list_code)
         return new_movie
 
-    def toggle_watched(self, movie_id: int, background_tasks: BackgroundTasks) -> Movie:
-        """Inverte o status assistido do filme, invalida cache e notifica clientes via WebSocket."""
+    def toggle_watched(self, movie_id: int, current_user: User, background_tasks: BackgroundTasks) -> Movie:
+        """Inverte o status assistido do filme com validação de permissão, invalida cache e notifica clientes via WebSocket."""
         movie = self.movie_repo.get_movie_by_id(movie_id)
         if not movie:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Filme não encontrado."
             )
+
+        self._verify_list_access(movie.movie_list, current_user)
 
         updated_movie = self.movie_repo.toggle_movie_watched(movie)
         list_code = updated_movie.movie_list.code
@@ -198,14 +210,16 @@ class MovieService:
         background_tasks.add_task(manager.broadcast_refresh, list_code)
         return updated_movie
 
-    def delete_movie(self, movie_id: int, background_tasks: BackgroundTasks) -> dict:
-        """Remove o filme, invalida cache e notifica clientes via WebSocket."""
+    def delete_movie(self, movie_id: int, current_user: User, background_tasks: BackgroundTasks) -> dict:
+        """Remove o filme com validação de permissão, invalida cache e notifica clientes via WebSocket."""
         movie = self.movie_repo.get_movie_by_id(movie_id)
         if not movie:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Filme não encontrado."
             )
+
+        self._verify_list_access(movie.movie_list, current_user)
 
         list_code = movie.movie_list.code
         self.movie_repo.delete_movie(movie)
@@ -214,14 +228,16 @@ class MovieService:
         return {"message": "Filme removido com sucesso"}
 
     # --- Comentários ---
-    def add_comment(self, movie_id: int, comment: CommentCreate, background_tasks: BackgroundTasks) -> Comment:
-        """Adiciona comentário, invalida cache e notifica a sala via WebSocket."""
+    def add_comment(self, movie_id: int, comment: CommentCreate, current_user: User, background_tasks: BackgroundTasks) -> Comment:
+        """Adiciona comentário com validação de permissão, invalida cache e notifica a sala via WebSocket."""
         movie = self.movie_repo.get_movie_by_id(movie_id)
         if not movie:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Filme não encontrado."
             )
+
+        self._verify_list_access(movie.movie_list, current_user)
 
         new_comment = self.movie_repo.add_comment(movie_id, comment.model_dump())
         list_code = movie.movie_list.code
@@ -230,46 +246,34 @@ class MovieService:
         return new_comment
 
     # --- Histórico de Sorteios ---
-    def add_draw_history(self, list_code: str, history: DrawHistoryCreate, background_tasks: BackgroundTasks) -> DrawHistory:
-        """Registra filme sorteado no histórico, invalida cache e dispara broadcast."""
+    def add_draw_history(self, list_code: str, history: DrawHistoryCreate, current_user: User, background_tasks: BackgroundTasks) -> DrawHistory:
+        """Registra filme sorteado no histórico com validação de permissão, invalida cache e dispara broadcast."""
         db_list = self.movie_repo.get_list_by_code(list_code)
-        if not db_list:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Lista não encontrada."
-            )
+        self._verify_list_access(db_list, current_user)
 
         new_entry = self.movie_repo.add_draw_history(db_list.id, history.model_dump())
         cache.delete_prefix(f"history:{list_code}")
         background_tasks.add_task(manager.broadcast_refresh, list_code)
         return new_entry
 
-    def get_draw_history(self, list_code: str, limit: int = 20) -> List[DrawHistory]:
-        """Retorna histórico de sorteios da lista com cache in-memory."""
+    def get_draw_history(self, list_code: str, current_user: User, limit: int = 20) -> List[DrawHistory]:
+        """Retorna histórico de sorteios da lista com validação de permissão e cache in-memory."""
+        db_list = self.movie_repo.get_list_by_code(list_code)
+        self._verify_list_access(db_list, current_user)
+
         cache_key = f"history:{list_code}:{limit}"
         cached = cache.get(cache_key)
         if cached is not None:
             return cached
 
-        db_list = self.movie_repo.get_list_by_code(list_code)
-        if not db_list:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Lista não encontrada."
-            )
-
         history = self.movie_repo.get_draw_history(db_list.id, limit=limit)
         cache.set(cache_key, history, ttl=180)
         return history
 
-    def cleanup_old_draw_history(self, list_code: str, days: int = 7, background_tasks: Optional[BackgroundTasks] = None) -> dict:
-        """Exclui sorteios com mais de `days` dias, invalida cache e notifica via WebSocket."""
+    def cleanup_old_draw_history(self, list_code: str, current_user: User, days: int = 7, background_tasks: Optional[BackgroundTasks] = None) -> dict:
+        """Exclui sorteios com mais de `days` dias com validação de permissão, invalida cache e notifica via WebSocket."""
         db_list = self.movie_repo.get_list_by_code(list_code)
-        if not db_list:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Lista não encontrada."
-            )
+        self._verify_list_access(db_list, current_user)
 
         deleted_count = self.movie_repo.cleanup_old_draw_history(db_list.id, days=days)
         cache.delete_prefix(f"history:{list_code}")
@@ -279,3 +283,4 @@ class MovieService:
             "deleted_count": deleted_count,
             "message": f"{deleted_count} registros antigos removidos do histórico."
         }
+

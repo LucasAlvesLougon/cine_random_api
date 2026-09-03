@@ -1,4 +1,4 @@
-﻿
+
 from fastapi import WebSocket
 from typing import Dict, List
 
@@ -7,10 +7,16 @@ class ConnectionManager:
         # map list_code -> list of active websockets
         self.active_connections: Dict[str, List[WebSocket]] = {}
 
-    async def connect(self, websocket: WebSocket, list_code: str):
+    async def connect(self, websocket: WebSocket, list_code: str, max_connections: int = 50):
         await websocket.accept()
         if list_code not in self.active_connections:
             self.active_connections[list_code] = []
+        
+        # Previne DoS por exaustão de conexões na mesma lista
+        if len(self.active_connections[list_code]) >= max_connections:
+            await websocket.close(code=1008)
+            return
+
         self.active_connections[list_code].append(websocket)
 
     def disconnect(self, websocket: WebSocket, list_code: str):

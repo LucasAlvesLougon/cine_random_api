@@ -204,3 +204,76 @@ def test_cleanup_old_draw_history(client, auth_headers, db_session):
     history_after = get_after.json()
     assert len(history_after) == 1
     assert history_after[0]["movie_title"] == "Interestelar Recente"
+
+def test_bola_unauthorized_movie_access_and_modification(client, auth_headers):
+    # Usuário 1 (auth_headers) cria uma lista e adiciona um filme
+    client.post("/lists/", json={"name": "Lista Privada de A", "code": "PRIV01"}, headers=auth_headers)
+    add_res = client.post("/lists/PRIV01/movies", json={"title": "Matrix", "tmdbId": 603}, headers=auth_headers)
+    assert add_res.status_code == 200
+    movie_id = add_res.json()["id"]
+
+    # Usuário 2 se cadastra e loga
+    client.post("/auth/signup", json={"email": "attacker@example.com", "password": "password123"})
+    login_res = client.post(
+        "/auth/login",
+        data={"username": "attacker@example.com", "password": "password123"},
+        headers={"Content-Type": "application/x-www-form-urlencoded"}
+    )
+    token2 = login_res.json()["access_token"]
+    attacker_headers = {"Authorization": f"Bearer {token2}"}
+
+    # 1. Atacante tenta listar filmes da lista privada -> 403 Forbidden
+    res_get = client.get("/lists/PRIV01/movies", headers=attacker_headers)
+    assert res_get.status_code == 403
+
+    # 2. Atacante tenta adicionar filme na lista de A -> 403 Forbidden
+    res_add = client.post("/lists/PRIV01/movies", json={"title": "Invasor", "tmdbId": 999}, headers=attacker_headers)
+    assert res_add.status_code == 403
+
+    # 3. Atacante tenta marcar o filme de A como assistido -> 403 Forbidden
+    res_toggle = client.put(f"/lists/movies/{movie_id}/toggle-watched", headers=attacker_headers)
+    assert res_toggle.status_code == 403
+
+    # 4. Atacante tenta deletar o filme de A -> 403 Forbidden
+    res_del = client.delete(f"/lists/movies/{movie_id}", headers=attacker_headers)
+    assert res_del.status_code == 403
+
+    # 5. Atacante tenta listar membros da lista de A -> 403 Forbidden
+    res_members = client.get("/lists/PRIV01/members", headers=attacker_headers)
+    assert res_members.status_code == 403
+
+    # 6. Atacante tenta ver o histórico da lista de A -> 403 Forbidden
+    res_history = client.get("/lists/PRIV01/history", headers=attacker_headers)
+    assert res_history.status_code == 403
+
+def test_websocket_authentication_and_authorization(client, auth_headers):
+    # Usuário 1 cria uma lista
+    client.post("/lists/", json={"name": "Lista WebSocket", "code": "WS001"}, headers=auth_headers)
+    token1 = auth_headers["Authorization"].split(" ")[1]
+
+    # Cria Usuário 2 (não membro)
+    client.post("/auth/signup", json={"email": "ws_stranger@example.com", "password": "password123"})
+    login_res = client.post(
+        "/auth/login",
+        data={"username": "ws_stranger@example.com", "password": "password123"},
+        headers={"Content-Type": "application/x-www-form-urlencoded"}
+    )
+    token2 = login_res.json()["access_token"]
+
+    # Conexão sem token -> deve falhar
+    import pytest
+    from starlette.websockets import WebSocketDisconnect
+
+    with pytest.raises(Exception):
+        with client.websocket_connect("/lists/ws/WS001") as ws:
+            pass
+
+    # Conexão com token de usuário que não é membro -> deve falhar
+    with pytest.raises(Exception):
+        with client.websocket_connect(f"/lists/ws/WS001?token={token2}") as ws:
+            pass
+
+    # Conexão com token válido do dono -> deve conectar com sucesso
+    with client.websocket_connect(f"/lists/ws/WS001?token={token1}") as ws:
+        assert ws is not None
+

@@ -50,3 +50,27 @@ def test_login_nonexistent_user(client):
         headers={"Content-Type": "application/x-www-form-urlencoded"}
     )
     assert response.status_code == 401
+
+def test_rate_limit_exceeded(client):
+    from utils.rate_limit import limiter
+    limiter.clear()
+
+    # Faz 10 requisições seguidas para bater no limite
+    for _ in range(10):
+        client.post(
+            "/auth/login",
+            data={"username": "test@test.com", "password": "wrongpassword"},
+            headers={"Content-Type": "application/x-www-form-urlencoded"}
+        )
+
+    # A 11ª requisição deve ser bloqueada por Rate Limit
+    blocked_res = client.post(
+        "/auth/login",
+        data={"username": "test@test.com", "password": "wrongpassword"},
+        headers={"Content-Type": "application/x-www-form-urlencoded"}
+    )
+    assert blocked_res.status_code == 429
+    assert "Retry-After" in blocked_res.headers
+    assert "Muitas tentativas" in blocked_res.json()["detail"]
+    limiter.clear()
+
