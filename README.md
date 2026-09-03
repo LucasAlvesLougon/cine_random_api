@@ -1,37 +1,51 @@
 # Cine Random - API (Backend) ⚙️
 
-Esta é a API que alimenta o **Cine Random**, desenvolvida em **Python** usando o framework **FastAPI**. Ela substitui a antiga infraestrutura do Firebase Firestore, garantindo um banco de dados relacional flexível e comunicação multi-player em tempo real.
+Esta é a API que alimenta o **Cine Random**, desenvolvida em **Python 3.11+** com **FastAPI** e **SQLAlchemy 2.0**, seguindo os princípios de **Clean Architecture** (Routers → Services → Repositories).
 
-## Tecnologias Principais
-- **FastAPI** (Framework web ultrarrápido com documentação automática)
-- **SQLAlchemy** (ORM para modelagem e persistência de dados estruturados)
-- **Pydantic** (Validação estrita de dados de entrada e saída)
-- **WebSockets** (Para disparo de eventos em tempo real)
-- **SQLite / PostgreSQL** (Armazenamento das listas, usuários e filmes)
-- **Passlib & PyJWT** (Para geração e validação de chaves eletrônicas JWT)
+O backend conta com comunicação bidirecional em tempo real via **WebSockets autenticados**, cache *in-memory* com expiração granular, **Rate Limiting** e blindagem contra vulnerabilidades **BOLA / IDOR**.
 
-## Funcionalidades
-A API gerencia os fluxos completos da aplicação de forma isolada, documentada e modular:
-- **Autenticação:** Login JWT clássico e integração completa com a verificação de Tokens do **Google OAuth**.
-- **Listas (CRUD):** Criação de listas, edição de nome de listas, exclusão segura e lógica de adesão de membros via convite.
-- **Filmes:** Rotas para associar filmes do TMDB às listas sem duplicatas e inversão de status (`watched`).
-- **WebSocket Manager:** Um gerenciador de conexões embutido. Assim que qualquer endpoint altera o estado de um filme, ele faz broadcast automático (`broadcast_refresh`) ordenando o frontend de todos os clientes assistindo aquela lista a se recarregarem simultaneamente.
+---
 
-## Como Executar
+## 🚀 Tecnologias Principais
 
-A API é configurada de forma moderna utilizando `uv` para gestão de dependências.
+* **Python 3.11+** + **FastAPI**: Framework assíncrono de alto desempenho.
+* **SQLAlchemy 2.0** + **PostgreSQL** / **SQLite**: Camada de persistência desacoplada com ORM relacional.
+* **Pydantic v2**: Validação estrita de contratos de dados e schemas.
+* **PyJWT & Bcrypt**: Autenticação com senhas criptografadas e tokens JWT assinados.
+* **Google Auth**: Validação nativa de tokens do Google Identity no backend.
+* **WebSockets Autenticados**: Broadcast em tempo real por sala (`list_code`) com validação de JWT no handshake.
+* **Cache & Rate Limiting In-Memory**: Utilitários thread-safe com algoritmo *Sliding Window* para proteção contra força bruta e DoS.
+* **Pytest**: Suíte de testes automatizados cobrindo fluxos felizes, erros e ataques de invasão (**23/23 testes verdes**).
 
-```bash
-# 1. Caso use uv (Altamente recomendado):
-uv sync
+---
 
-# 1.1 Caso use Pip/venv padrão:
-python -m venv .venv
-# ative a venv: .venv\Scripts\activate
-# instale dependências do pyproject.toml ou pip install -r requirements.txt se existir
+## 🛡️ Arquitetura & Segurança
 
-# 2. Execute o servidor uvicorn
-uvicorn main:app --reload
+```
+routers/       -> Camada de transporte HTTP pura (validação de payload e chamadas ao Service)
+services/      -> Lógica de negócio, validação de regras de domínio, BOLA guards e eventos
+repositories/  -> Persistência exclusiva e queries no banco de dados via SQLAlchemy
+utils/         -> Rate Limiting, Cache com TTL, Notificações e Segurança JWT
 ```
 
-Após iniciar, basta acessar a documentação automática da sua API visitando `http://localhost:8000/docs` no navegador. Lá você pode testar todos os endpoints!
+* **Blindagem BOLA / IDOR:** Qualquer requisição para leitura ou modificação de filmes, membros, comentários ou histórico valida a relação do usuário com a lista (`_verify_list_access`), retornando `403 Forbidden` para invasores.
+* **Proteção do WebSocket:** Handshake obrigatório com token JWT (`/lists/ws/{code}?token=...`) e limite de 50 conexões por sala.
+* **Rate Limiting:** Rotas `/auth/login` (10 req/min) e `/auth/signup` (5 req/min) protegidas contra força bruta com resposta `429 Too Many Requests` e header `Retry-After`.
+
+---
+
+## 🛠️ Como Executar Localmente
+
+```bash
+# 1. Com o gerenciador Astral uv (Recomendado):
+uv sync
+
+# 2. Executar o servidor FastAPI em desenvolvimento:
+uv run uvicorn main:app --reload --port 8000
+
+# 3. Executar a suíte completa de testes automatizados:
+uv run pytest
+```
+
+Após iniciar, acesse a documentação interativa OpenAPI / Swagger UI no navegador: `http://localhost:8000/docs`.
+
