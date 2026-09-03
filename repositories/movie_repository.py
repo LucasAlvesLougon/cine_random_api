@@ -9,11 +9,16 @@ class MovieRepository:
 
     # --- Listas ---
     def get_lists_for_user(self, user: User) -> List[MovieList]:
-        """Retorna todas as listas que o usuário é dono ou membro."""
-        owned = self.db.query(MovieList).filter(MovieList.owner_id == user.id).all()
-        joined = user.joined_lists
-        all_lists = {lst.id: lst for lst in owned + joined}.values()
-        return list(all_lists)
+        """Retorna todas as listas que o usuário é dono ou membro de forma eficiente."""
+        return (
+            self.db.query(MovieList)
+            .filter(
+                (MovieList.owner_id == user.id) | 
+                (MovieList.members.any(User.id == user.id))
+            )
+            .distinct()
+            .all()
+        )
 
     def get_list_by_code(self, code: str) -> Optional[MovieList]:
         """Busca uma lista pelo código único."""

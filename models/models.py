@@ -7,8 +7,8 @@ from sqlalchemy import Table
 user_lists_association = Table(
     'user_lists_association',
     Base.metadata,
-    Column('user_id', Integer, ForeignKey('users.id')),
-    Column('list_id', Integer, ForeignKey('lists.id'))
+    Column('user_id', Integer, ForeignKey('users.id'), index=True),
+    Column('list_id', Integer, ForeignKey('lists.id'), index=True)
 )
 class User(Base):
     __tablename__ = "users"
@@ -26,7 +26,7 @@ class MovieList(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
     code = Column(String, unique=True, index=True) # Ex: "teste123" que você usou no Front
-    owner_id = Column(Integer, ForeignKey("users.id"))
+    owner_id = Column(Integer, ForeignKey("users.id"), index=True)
 
     owner = relationship("User", back_populates="lists")
     movies = relationship("Movie", back_populates="movie_list", cascade="all, delete-orphan", order_by="Movie.id.desc()")
