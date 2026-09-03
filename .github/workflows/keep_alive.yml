@@ -1,0 +1,24 @@
+﻿name: Keep Alive Render API
+
+on:
+  schedule:
+    # Executa a cada 10 minutos entre 10:00 UTC e 03:00 UTC (horário de atividade no Brasil 07h às 00h)
+    - cron: '*/10 10-23,0-3 * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    name: Ping API Healthcheck
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Render Backend
+        run: |
+          API_URL="${{ secrets.RENDER_API_URL || 'https://cine-random-api.onrender.com' }}"
+          echo "Pinging ${API_URL}/ping..."
+          RESPONSE=$(curl -s -w "%{http_code}" -o /dev/null "${API_URL}/ping")
+          echo "HTTP Status: ${RESPONSE}"
+          if [ "$RESPONSE" -ge 200 ] && [ "$RESPONSE" -lt 400 ]; then
+            echo "API está ativa e acordada!"
+          else
+            echo "Aviso: Status HTTP ${RESPONSE}"
+          fi

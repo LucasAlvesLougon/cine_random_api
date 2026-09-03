@@ -8,7 +8,19 @@ if db_url.startswith("postgres://"):
 elif db_url.startswith("postgresql://"):
     db_url = db_url.replace("postgresql://", "postgresql+psycopg://", 1)
 
-engine = create_engine(db_url)
+engine_kwargs = {}
+if "sqlite" in db_url:
+    engine_kwargs["connect_args"] = {"check_same_thread": False}
+else:
+    # Otimizações para PostgreSQL Serverless (Neon, Supabase, Render PgBouncer)
+    engine_kwargs.update({
+        "pool_pre_ping": True,
+        "pool_recycle": 300,
+        "pool_size": 10,
+        "max_overflow": 20,
+    })
+
+engine = create_engine(db_url, **engine_kwargs)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
@@ -17,6 +29,5 @@ def get_db():
     db = SessionLocal()
     try:
         yield db
-
     finally:
         db.close()

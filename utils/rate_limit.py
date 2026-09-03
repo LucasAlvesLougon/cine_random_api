@@ -1,4 +1,4 @@
-﻿import time
+import time
 from threading import Lock
 from typing import Dict, List, Tuple, Callable
 from fastapi import Request, HTTPException, status
@@ -39,6 +39,34 @@ class InMemoryRateLimiter:
 
 limiter = InMemoryRateLimiter()
 
+def check_upstash_rate_limit(key: str, limit: int, window_seconds: int) -> Tuple[bool, int]:
+    """Valida rate limit no Upstash Redis via REST API com fallback in-memory automático."""
+    from config import settings
+    if not settings.UPSTASH_REDIS_REST_URL or not settings.UPSTASH_REDIS_REST_TOKEN:
+        return limiter.is_rate_limited(key, limit, window_seconds)
+
+    try:
+        import requests
+        url = f"{settings.UPSTASH_REDIS_REST_URL}/pipeline"
+        headers = {"Authorization": f"Bearer {settings.UPSTASH_REDIS_REST_TOKEN}"}
+        redis_key = f"ratelimit:{key}"
+        body = [
+            ["INCR", redis_key],
+            ["EXPIRE", redis_key, window_seconds, "NX"]
+        ]
+        res = requests.post(url, headers=headers, json=body, timeout=1.5)
+        if res.status_code == 200:
+            data = res.json()
+            count = data[0].get("result", 1)
+            if count > limit:
+                return True, window_seconds
+            return False, 0
+    except Exception:
+        # Fallback automático e silencioso para in-memory se houver timeout ou indisponibilidade
+        pass
+
+    return limiter.is_rate_limited(key, limit, window_seconds)
+
 def get_client_ip(request: Request) -> str:
     """Extrai o IP real do cliente considerando proxies reversos (Render / Vercel / Cloudflare)."""
     forwarded = request.headers.get("X-Forwarded-For")
@@ -56,7 +84,7 @@ def rate_limit(limit: int, window_seconds: int) -> Callable:
         endpoint = request.url.path
         key = f"{client_ip}:{endpoint}"
 
-        is_limited, retry_after = limiter.is_rate_limited(key, limit, window_seconds)
+        is_limited, retry_after = check_upstash_rate_limit(key, limit, window_seconds)
         if is_limited:
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -65,3 +93,4 @@ def rate_limit(limit: int, window_seconds: int) -> Callable:
             )
 
     return dependency
+
