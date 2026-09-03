@@ -162,3 +162,45 @@ def test_remove_list_member(client, auth_headers):
     # Verifica se agora só restou 1 membro
     members_after = client.get("/lists/VIP01/members", headers=auth_headers)
     assert len(members_after.json()) == 1
+
+def test_cleanup_old_draw_history(client, auth_headers, db_session):
+    from datetime import datetime, timezone, timedelta
+    from models.models import DrawHistory, MovieList
+
+    # Cria lista
+    client.post("/lists/", json={"name": "Histórico Antigo", "code": "CLN01"}, headers=auth_headers)
+    db_list = db_session.query(MovieList).filter(MovieList.code == "CLN01").first()
+
+    # Cria 1 registro recente (hoje) e 1 registro antigo (10 dias atrás)
+    old_date = (datetime.now(timezone.utc) - timedelta(days=10)).isoformat()
+    recent_date = datetime.now(timezone.utc).isoformat()
+
+    old_entry = DrawHistory(
+        list_id=db_list.id,
+        movie_title="Matrix Antigo",
+        draw_type="roulette",
+        drawn_at=old_date
+    )
+    recent_entry = DrawHistory(
+        list_id=db_list.id,
+        movie_title="Interestelar Recente",
+        draw_type="roulette",
+        drawn_at=recent_date
+    )
+    db_session.add_all([old_entry, recent_entry])
+    db_session.commit()
+
+    # Confirma que há 2 itens no histórico
+    get_res = client.get("/lists/CLN01/history", headers=auth_headers)
+    assert len(get_res.json()) == 2
+
+    # Executa limpeza de registros com mais de 7 dias
+    clean_res = client.delete("/lists/CLN01/history/cleanup?days=7", headers=auth_headers)
+    assert clean_res.status_code == 200
+    assert clean_res.json()["deleted_count"] == 1
+
+    # Confirma que só restou o registro recente
+    get_after = client.get("/lists/CLN01/history", headers=auth_headers)
+    history_after = get_after.json()
+    assert len(history_after) == 1
+    assert history_after[0]["movie_title"] == "Interestelar Recente"

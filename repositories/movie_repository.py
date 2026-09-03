@@ -1,6 +1,6 @@
 from typing import List, Optional
 from sqlalchemy.orm import Session
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from models.models import Movie, MovieList, User, Comment, DrawHistory
 
 class MovieRepository:
@@ -131,3 +131,13 @@ class MovieRepository:
     def get_draw_history(self, list_id: int, limit: int = 20) -> List[DrawHistory]:
         """Retorna o histórico dos últimos filmes sorteados da lista."""
         return self.db.query(DrawHistory).filter(DrawHistory.list_id == list_id).order_by(DrawHistory.id.desc()).limit(limit).all()
+
+    def cleanup_old_draw_history(self, list_id: int, days: int = 7) -> int:
+        """Exclui registros de histórico de sorteios com mais de `days` dias."""
+        cutoff_iso = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+        deleted_count = self.db.query(DrawHistory).filter(
+            DrawHistory.list_id == list_id,
+            DrawHistory.drawn_at < cutoff_iso
+        ).delete(synchronize_session=False)
+        self.db.commit()
+        return deleted_count

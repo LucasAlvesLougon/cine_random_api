@@ -99,6 +99,12 @@ def get_draw_history(list_code: str, limit: int = 20, db: Session = Depends(get_
     service = MovieService(db)
     return service.get_draw_history(list_code, limit=limit)
 
+@router.delete("/{list_code}/history/cleanup")
+def cleanup_draw_history(list_code: str, days: int = 7, background_tasks: BackgroundTasks = BackgroundTasks(), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Remove registros de sorteios mais antigos que 'days' dias (padrão: 7 dias)."""
+    service = MovieService(db)
+    return service.cleanup_old_draw_history(list_code, days=days, background_tasks=background_tasks)
+
 @router.websocket('/ws/{list_code}')
 async def websocket_endpoint(websocket: WebSocket, list_code: str):
     await manager.connect(websocket, list_code)

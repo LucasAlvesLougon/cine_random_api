@@ -1,6 +1,6 @@
 from fastapi import HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 
 from repositories.movie_repository import MovieRepository
 from models.models import User, MovieList, Movie, Comment, DrawHistory
@@ -261,3 +261,21 @@ class MovieService:
         history = self.movie_repo.get_draw_history(db_list.id, limit=limit)
         cache.set(cache_key, history, ttl=180)
         return history
+
+    def cleanup_old_draw_history(self, list_code: str, days: int = 7, background_tasks: Optional[BackgroundTasks] = None) -> dict:
+        """Exclui sorteios com mais de `days` dias, invalida cache e notifica via WebSocket."""
+        db_list = self.movie_repo.get_list_by_code(list_code)
+        if not db_list:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Lista não encontrada."
+            )
+
+        deleted_count = self.movie_repo.cleanup_old_draw_history(db_list.id, days=days)
+        cache.delete_prefix(f"history:{list_code}")
+        if background_tasks:
+            background_tasks.add_task(manager.broadcast_refresh, list_code)
+        return {
+            "deleted_count": deleted_count,
+            "message": f"{deleted_count} registros antigos removidos do histórico."
+        }
