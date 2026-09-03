@@ -1,6 +1,6 @@
 from typing import List, Optional
 from sqlalchemy.orm import Session
-from datetime import datetime
+from datetime import datetime, timezone
 from models.models import Movie, MovieList, User, Comment, DrawHistory
 
 class MovieRepository:
@@ -108,7 +108,7 @@ class MovieRepository:
         new_comment = Comment(
             **comment_data,
             movie_id=movie_id,
-            created_at=datetime.utcnow().isoformat()
+            created_at=datetime.now(timezone.utc).isoformat()
         )
         self.db.add(new_comment)
         self.db.commit()
@@ -121,7 +121,7 @@ class MovieRepository:
         new_entry = DrawHistory(
             **history_data,
             list_id=list_id,
-            drawn_at=datetime.utcnow().isoformat()
+            drawn_at=datetime.now(timezone.utc).isoformat()
         )
         self.db.add(new_entry)
         self.db.commit()
