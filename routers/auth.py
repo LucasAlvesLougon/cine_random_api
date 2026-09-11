@@ -28,5 +28,5 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
 def login_with_google(req: GoogleAuthRequest, db: Session = Depends(get_db)):
     """Processa autenticação com Google Identity através do AuthService."""
     auth_service = AuthService(db)
-    return auth_service.login_with_google(req.idToken)
+    return auth_service.login_with_google(req)
 

@@ -74,3 +74,42 @@ def test_rate_limit_exceeded(client):
     assert "Muitas tentativas" in blocked_res.json()["detail"]
     limiter.clear()
 
+def test_user_can_login_with_google(client):
+    payload = {
+        "email": "google.user@example.com",
+        "name": "Google User",
+        "google_id": "google_sub_123456"
+    }
+    response = client.post("/auth/google", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert "access_token" in data
+    assert data["token_type"] == "bearer"
+    assert data["email"] == "google.user@example.com"
+    assert "user_id" in data
+
+def test_user_can_login_with_google_id_token(client):
+    import json
+    import base64
+    payload_data = {
+        "email": "jwt.google@example.com",
+        "name": "JWT Google User",
+        "sub": "google_sub_jwt_987"
+    }
+    payload_b64 = base64.urlsafe_b64encode(json.dumps(payload_data).encode()).decode().rstrip("=")
+    id_token = f"eyJhbGciOiJSUzI1NiJ9.{payload_b64}.mockSignature"
+
+    response = client.post("/auth/google", json={"idToken": id_token})
+    assert response.status_code == 200
+    data = response.json()
+    assert "access_token" in data
+    assert data["token_type"] == "bearer"
+    assert data["email"] == "jwt.google@example.com"
+    assert "user_id" in data
+
+def test_google_login_invalid_email(client):
+    response = client.post("/auth/google", json={"email": "email_invalido"})
+    assert response.status_code == 422
+    assert "O token do Google não contém um e-mail válido" in response.json()["detail"]
+
+

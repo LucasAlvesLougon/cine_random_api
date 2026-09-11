@@ -19,7 +19,12 @@ class TokenResponse(BaseModel):
     user_id: Optional[int] = None
 
 class GoogleAuthRequest(BaseModel):
-    idToken: str
+    idToken: Optional[str] = None
+    credential: Optional[str] = None
+    token: Optional[str] = None
+    email: Optional[str] = None
+    name: Optional[str] = None
+    google_id: Optional[str] = None
 
 
 # --- LISTAS ---

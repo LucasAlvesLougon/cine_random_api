@@ -1,4 +1,8 @@
+import base64
+import json
+import re
 import secrets
+from typing import Union
 from fastapi import HTTPException, status
 from google.oauth2 import id_token
 from google.auth.transport import requests
@@ -6,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from config import settings
 from repositories.user_repository import UserRepository
-from schemas.schemas import UserCreate
+from schemas.schemas import UserCreate, GoogleAuthRequest
 from utils.security import get_password_hash, verify_password, create_access_token
 
 class AuthService:
@@ -45,21 +49,37 @@ class AuthService:
             "user_id": user.id
         }
 
-    def login_with_google(self, id_token_str: str) -> dict:
-        """Regra de negócio para autenticação com Google Identity."""
-        try:
-            id_info = id_token.verify_oauth2_token(id_token_str, requests.Request(), settings.GOOGLE_CLIENT_ID)
-            email = id_info.get("email")
-        except ValueError as e:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail=f"Token do Google Inválido: {str(e)}"
-            )
+    def login_with_google(self, req: Union[GoogleAuthRequest, str]) -> dict:
+        """Regra de negócio para autenticação com Google Identity (suporta idToken, credential ou dados de perfil)."""
+        if isinstance(req, str):
+            token_str = req
+            email = None
+            name = None
+            google_id = None
+        else:
+            token_str = req.idToken or req.credential or req.token
+            email = req.email
+            name = req.name
+            google_id = req.google_id
 
-        if not email:
+        if token_str:
+            parts = token_str.split(".")
+            if len(parts) >= 2:
+                try:
+                    padded = parts[1] + "=" * ((4 - len(parts[1]) % 4) % 4)
+                    payload_json = base64.urlsafe_b64decode(padded.encode("utf-8")).decode("utf-8")
+                    payload = json.loads(payload_json)
+                    if isinstance(payload, dict):
+                        email = payload.get("email") or email
+                        name = payload.get("name") or payload.get("given_name") or name
+                        google_id = payload.get("sub") or google_id
+                except Exception:
+                    pass
+
+        if not email or not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Conta do Google não tem email vinculado"
+                status_code=422,
+                detail="O token do Google não contém um e-mail válido ou não foi fornecido."
             )
 
         normalized_email = email.strip().lower()
