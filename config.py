@@ -15,7 +15,7 @@ class Settings(BaseSettings):
         "https://cinerandomseven.vercel.app",
     ]
     CORS_ORIGIN_REGEX: str = r"^https:\/\/.*\.vercel\.app$"
-    GOOGLE_CLIENT_ID: str = "283172265638-2cib86k0v38qmjae78snu5ps1p4sd513.apps.googleusercontent.com"
+    GOOGLE_CLIENT_ID: str = "844495701284-qvgpkr9446kr02dki8vs29191t1p33o7.apps.googleusercontent.com"
     UPSTASH_REDIS_REST_URL: str | None = None
     UPSTASH_REDIS_REST_TOKEN: str | None = None
 
