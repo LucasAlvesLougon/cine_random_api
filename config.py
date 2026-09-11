@@ -12,6 +12,7 @@ class Settings(BaseSettings):
         "http://127.0.0.1:5173",
         "http://127.0.0.1:3000",
         "https://cine-random.vercel.app",
+        "https://cinerandomseven.vercel.app",
     ]
     CORS_ORIGIN_REGEX: str = r"^https:\/\/.*\.vercel\.app$"
     GOOGLE_CLIENT_ID: str = "283172265638-2cib86k0v38qmjae78snu5ps1p4sd513.apps.googleusercontent.com"
