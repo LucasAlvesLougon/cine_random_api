@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -18,6 +18,19 @@ def liveness():
 @router.get("/ready")
 def readiness(db: Session = Depends(get_db)):
     """Confirma que a API e sua dependência crítica estão prontas."""
+    _ensure_database_ready(db)
+    return {"status": "ready"}
+
+
+@router.head("/ready")
+def readiness_head(db: Session = Depends(get_db)):
+    """Permite que monitores HTTP verifiquem a prontidão sem baixar um corpo."""
+    _ensure_database_ready(db)
+    return Response(status_code=status.HTTP_200_OK)
+
+
+def _ensure_database_ready(db: Session):
+    """Raises a service-unavailable response when the database cannot be reached."""
     try:
         db.execute(text("SELECT 1"))
     except SQLAlchemyError as exc:
@@ -25,4 +38,3 @@ def readiness(db: Session = Depends(get_db)):
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Database unavailable",
         ) from exc
-    return {"status": "ready"}
