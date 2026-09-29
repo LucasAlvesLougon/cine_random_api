@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
 from database.connection import get_db
-from schemas.schemas import UserCreate, UserResponse, TokenResponse, GoogleAuthRequest
+from config import settings
+from schemas.schemas import UserCreate, UserResponse, TokenResponse, GoogleAuthRequest, DemoAuthRequest
 from services.auth_service import AuthService
 from utils.rate_limit import rate_limit
 
@@ -29,4 +30,13 @@ def login_with_google(req: GoogleAuthRequest, db: Session = Depends(get_db)):
     """Processa autenticação com Google Identity através do AuthService."""
     auth_service = AuthService(db)
     return auth_service.login_with_google(req)
+
+@router.post("/demo", response_model=TokenResponse, dependencies=[Depends(rate_limit(limit=10, window_seconds=60))])
+def login_demo(req: DemoAuthRequest, db: Session = Depends(get_db)):
+    """Disponibiliza login simulado apenas quando habilitado fora de produção."""
+    if settings.ENVIRONMENT.lower() == "production" or not settings.ALLOW_DEMO_AUTH:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Rota não encontrada.")
+
+    auth_service = AuthService(db)
+    return auth_service.login_demo(req)
 

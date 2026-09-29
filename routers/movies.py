@@ -4,14 +4,14 @@ from typing import List, Optional
 
 from database.connection import get_db
 from sockets import manager
-from models.models import User, MovieList
+from models.models import User
 from schemas.schemas import (
     MovieCreate, MovieResponse, MovieListCreate,
     MovieListResponse, CommentCreate, CommentResponse,
     DrawHistoryCreate, DrawHistoryResponse, MemberResponse
 )
 from services.movie_service import MovieService
-from utils.security import get_current_user, decode_token
+from utils.security import get_current_user
 
 router = APIRouter(prefix="/lists", tags=["Listas de Filmes"])
 
@@ -116,18 +116,8 @@ async def websocket_endpoint(
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
 
-    email = decode_token(token)
-    if not email:
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-        return
-
-    user = db.query(User).filter(User.email == email).first()
-    if not user:
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-        return
-
-    db_list = db.query(MovieList).filter(MovieList.code == list_code).first()
-    if not db_list or (db_list.owner_id != user.id and not any(m.id == user.id for m in db_list.members)):
+    service = MovieService(db)
+    if not service.can_connect_websocket(token, list_code):
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
 

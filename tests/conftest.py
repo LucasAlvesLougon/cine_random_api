@@ -5,6 +5,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from database.connection import Base, get_db
+from config import settings
 from main import app
 from utils.rate_limit import limiter
 import models.models
@@ -20,8 +21,9 @@ engine_test = create_engine(
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine_test)
 
 @pytest.fixture(autouse=True)
-def setup_database():
+def setup_database(monkeypatch):
     """Recria as tabelas do banco e limpa rate limiters antes de cada teste."""
+    monkeypatch.setattr(settings, "SECRET_KEY", "test_secret_key_with_at_least_32_bytes")
     limiter.clear()
     Base.metadata.create_all(bind=engine_test)
     yield

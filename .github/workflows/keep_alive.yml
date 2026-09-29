@@ -2,8 +2,8 @@
 
 on:
   schedule:
-    # Executa a cada 10 minutos entre 10:00 UTC e 03:00 UTC (horário de atividade no Brasil 07h às 00h)
-    - cron: '*/10 10-23,0-3 * * *'
+    # Fallback gratuito. UptimeRobot a cada 5 min é o monitor principal recomendado.
+    - cron: '*/10 * * * *'
   workflow_dispatch:
 
 jobs:
@@ -12,10 +12,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Ping Render Backend
+        env:
+          API_URL: ${{ secrets.RENDER_API_URL }}
         run: |
-          API_URL="${{ secrets.RENDER_API_URL || 'https://cine-random-api.onrender.com' }}"
-          echo "Pinging ${API_URL}/ping..."
-          RESPONSE=$(curl -s -w "%{http_code}" -o /dev/null "${API_URL}/ping")
+          if [ -z "${API_URL}" ]; then
+            echo "Configure o secret RENDER_API_URL com a URL pública real da API."
+            exit 1
+          fi
+          echo "Pinging ${API_URL}/health/ready..."
+          RESPONSE=$(curl --fail --silent --show-error --max-time 30 -w "%{http_code}" -o /dev/null "${API_URL}/health/ready")
           echo "HTTP Status: ${RESPONSE}"
           if [ "$RESPONSE" -ge 200 ] && [ "$RESPONSE" -lt 400 ]; then
             echo "API está ativa e acordada!"

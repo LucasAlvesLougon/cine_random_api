@@ -1,8 +1,13 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import field_validator
+from pydantic import model_validator
+from typing import ClassVar
 
 class Settings(BaseSettings):
-    SECRET_KEY: str = "dev_secret_key_super_secure_and_long_enough_for_jwt_sha256_cine_random"
+    DEVELOPMENT_SECRET_KEY: ClassVar[str] = "dev_secret_key_super_secure_and_long_enough_for_jwt_sha256_cine_random"
+
+    ENVIRONMENT: str = "development"
+    ALLOW_DEMO_AUTH: bool = False
+    SECRET_KEY: str = DEVELOPMENT_SECRET_KEY
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 10080
     DATABASE_URL: str = "sqlite:///./cine_random.db"
@@ -15,16 +20,20 @@ class Settings(BaseSettings):
         "https://cinerandomseven.vercel.app",
     ]
     CORS_ORIGIN_REGEX: str = r"^https:\/\/.*\.vercel\.app$"
-    GOOGLE_CLIENT_ID: str = "844495701284-qvgpkr9446kr02dki8vs29191t1p33o7.apps.googleusercontent.com"
+    GOOGLE_CLIENT_ID: str = ""
     UPSTASH_REDIS_REST_URL: str | None = None
     UPSTASH_REDIS_REST_TOKEN: str | None = None
 
-    @field_validator("SECRET_KEY")
-    @classmethod
-    def validate_secret_key_length(cls, v: str) -> str:
-        if len(v.encode("utf-8")) < 32:
-            return v.ljust(32, "x")
-        return v
+    @model_validator(mode="after")
+    def validate_production_settings(self):
+        if self.ENVIRONMENT.strip().lower() != "production":
+            return self
+
+        if len(self.SECRET_KEY.encode("utf-8")) < 32 or self.SECRET_KEY == self.DEVELOPMENT_SECRET_KEY:
+            raise ValueError("SECRET_KEY must be a strong, production-specific secret")
+        if not self.GOOGLE_CLIENT_ID.strip():
+            raise ValueError("GOOGLE_CLIENT_ID is required in production")
+        return self
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

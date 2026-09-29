@@ -3,24 +3,51 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 
 from repositories.movie_repository import MovieRepository
+from repositories.user_repository import UserRepository
 from models.models import User, MovieList, Movie, Comment, DrawHistory
-from schemas.schemas import MovieListCreate, MovieCreate, CommentCreate, DrawHistoryCreate
+from schemas.schemas import (
+    MovieListCreate,
+    MovieListResponse,
+    MovieCreate,
+    MovieResponse,
+    CommentCreate,
+    DrawHistoryCreate,
+    DrawHistoryResponse,
+)
 from sockets import manager
 from utils.cache import cache
+from utils.security import decode_token
 
 class MovieService:
     def __init__(self, db: Session):
         self.movie_repo = MovieRepository(db)
+        self.user_repo = UserRepository(db)
+
+    def can_connect_websocket(self, token: str, list_code: str) -> bool:
+        """Valida identidade e participação na lista sem expor SQL ao router."""
+        email = decode_token(token)
+        if not email:
+            return False
+        user = self.user_repo.get_by_email(email)
+        if not user:
+            return False
+        movie_list = self.movie_repo.get_list_by_code(list_code)
+        if not movie_list:
+            return False
+        return movie_list.owner_id == user.id or any(member.id == user.id for member in movie_list.members)
 
     # --- Listas ---
-    def get_my_lists(self, current_user: User) -> List[MovieList]:
+    def get_my_lists(self, current_user: User) -> List[dict]:
         """Retorna todas as listas associadas ao usuário com cache in-memory."""
         cache_key = f"user_lists:{current_user.id}"
         cached = cache.get(cache_key)
         if cached is not None:
             return cached
 
-        lists = self.movie_repo.get_lists_for_user(current_user)
+        lists = [
+            MovieListResponse.model_validate(item).model_dump(mode="json")
+            for item in self.movie_repo.get_lists_for_user(current_user)
+        ]
         cache.set(cache_key, lists, ttl=120)
         return lists
 
@@ -162,7 +189,7 @@ class MovieService:
         return {"message": "Participante removido com sucesso"}
 
     # --- Filmes ---
-    def get_movies(self, list_code: str, current_user: User) -> List[Movie]:
+    def get_movies(self, list_code: str, current_user: User) -> List[dict]:
         """Retorna todos os filmes de uma lista com validação de permissão e cache in-memory."""
         db_list = self.movie_repo.get_list_by_code(list_code)
         self._verify_list_access(db_list, current_user)
@@ -172,7 +199,10 @@ class MovieService:
         if cached is not None:
             return cached
 
-        movies = db_list.movies
+        movies = [
+            MovieResponse.model_validate(movie).model_dump(mode="json")
+            for movie in db_list.movies
+        ]
         cache.set(cache_key, movies, ttl=180)
         return movies
 
@@ -256,7 +286,7 @@ class MovieService:
         background_tasks.add_task(manager.broadcast_refresh, list_code)
         return new_entry
 
-    def get_draw_history(self, list_code: str, current_user: User, limit: int = 20) -> List[DrawHistory]:
+    def get_draw_history(self, list_code: str, current_user: User, limit: int = 20) -> List[dict]:
         """Retorna histórico de sorteios da lista com validação de permissão e cache in-memory."""
         db_list = self.movie_repo.get_list_by_code(list_code)
         self._verify_list_access(db_list, current_user)
@@ -266,7 +296,10 @@ class MovieService:
         if cached is not None:
             return cached
 
-        history = self.movie_repo.get_draw_history(db_list.id, limit=limit)
+        history = [
+            DrawHistoryResponse.model_validate(entry).model_dump(mode="json")
+            for entry in self.movie_repo.get_draw_history(db_list.id, limit=limit)
+        ]
         cache.set(cache_key, history, ttl=180)
         return history
 

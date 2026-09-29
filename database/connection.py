@@ -2,11 +2,15 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 from config import settings
 
-db_url = settings.DATABASE_URL
-if db_url.startswith("postgres://"):
-    db_url = db_url.replace("postgres://", "postgresql+psycopg://", 1)
-elif db_url.startswith("postgresql://"):
-    db_url = db_url.replace("postgresql://", "postgresql+psycopg://", 1)
+def normalize_database_url(database_url: str) -> str:
+    if database_url.startswith("postgres://"):
+        return database_url.replace("postgres://", "postgresql+psycopg://", 1)
+    if database_url.startswith("postgresql://"):
+        return database_url.replace("postgresql://", "postgresql+psycopg://", 1)
+    return database_url
+
+
+db_url = normalize_database_url(settings.DATABASE_URL)
 
 engine_kwargs = {}
 if "sqlite" in db_url:
@@ -16,8 +20,10 @@ else:
     engine_kwargs.update({
         "pool_pre_ping": True,
         "pool_recycle": 300,
+        "pool_timeout": 5,
         "pool_size": 10,
         "max_overflow": 20,
+        "connect_args": {"connect_timeout": 5},
     })
 
 engine = create_engine(db_url, **engine_kwargs)
