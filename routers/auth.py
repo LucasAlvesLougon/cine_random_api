@@ -4,9 +4,17 @@ from sqlalchemy.orm import Session
 
 from database.connection import get_db
 from config import settings
-from schemas.schemas import UserCreate, UserResponse, TokenResponse, GoogleAuthRequest, DemoAuthRequest
+from schemas.schemas import (
+    UserCreate,
+    UserResponse,
+    TokenResponse,
+    GoogleAuthRequest,
+    GoogleLinkResponse,
+    DemoAuthRequest,
+)
 from services.auth_service import AuthService
 from utils.rate_limit import rate_limit
+from utils.security import get_current_user
 
 router = APIRouter(
     prefix="/auth",
@@ -30,6 +38,20 @@ def login_with_google(req: GoogleAuthRequest, db: Session = Depends(get_db)):
     """Processa autenticação com Google Identity através do AuthService."""
     auth_service = AuthService(db)
     return auth_service.login_with_google(req)
+
+@router.post(
+    "/google/link",
+    response_model=GoogleLinkResponse,
+    dependencies=[Depends(rate_limit(limit=10, window_seconds=60))],
+)
+def link_google_account(
+    req: GoogleAuthRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Vincula uma conta Google à conta local autenticada."""
+    auth_service = AuthService(db)
+    return auth_service.link_google_account(req, current_user)
 
 @router.post("/demo", response_model=TokenResponse, dependencies=[Depends(rate_limit(limit=10, window_seconds=60))])
 def login_demo(req: DemoAuthRequest, db: Session = Depends(get_db)):

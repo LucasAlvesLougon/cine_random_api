@@ -47,11 +47,11 @@ class AuthService:
             "user_id": user.id
         }
 
-    def login_with_google(self, req: GoogleAuthRequest) -> dict:
-        """Autentica usando apenas um ID token assinado e validado pelo Google."""
+    def _verify_google_credential(self, credential: str) -> tuple[str, str]:
+        """Valida um ID token Google e retorna email normalizado e subject estável."""
         try:
             claims = id_token.verify_oauth2_token(
-                req.credential,
+                credential,
                 requests.Request(),
                 settings.GOOGLE_CLIENT_ID,
             )
@@ -80,6 +80,11 @@ class AuthService:
             )
 
         normalized_email = email.strip().lower()
+        return normalized_email, google_sub
+
+    def login_with_google(self, req: GoogleAuthRequest) -> dict:
+        """Autentica usando apenas um ID token assinado e validado pelo Google."""
+        normalized_email, google_sub = self._verify_google_credential(req.credential)
         user = self.user_repo.get_by_google_sub(google_sub)
         if not user:
             existing_user = self.user_repo.get_by_email(normalized_email)
@@ -103,6 +108,41 @@ class AuthService:
             "token_type": "bearer",
             "email": user.email,
             "user_id": user.id
+        }
+
+    def link_google_account(self, req: GoogleAuthRequest, current_user) -> dict:
+        """Vincula Google somente após autenticação local e confirmação de email."""
+        normalized_email, google_sub = self._verify_google_credential(req.credential)
+
+        if normalized_email != current_user.email.strip().lower():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="O email do Google deve ser o mesmo da conta atual.",
+            )
+
+        linked_user = self.user_repo.get_by_google_sub(google_sub)
+        if linked_user and linked_user.id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Esta conta Google já está vinculada a outro usuário.",
+            )
+
+        if current_user.google_sub and current_user.google_sub != google_sub:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Esta conta já está vinculada a outra conta Google.",
+            )
+
+        if current_user.google_sub == google_sub:
+            detail = "Esta conta Google já está vinculada."
+        else:
+            self.user_repo.link_google_sub(current_user, google_sub)
+            detail = "Conta Google vinculada com sucesso."
+
+        return {
+            "detail": detail,
+            "email": current_user.email,
+            "user_id": current_user.id,
         }
 
     def login_demo(self, req: DemoAuthRequest) -> dict:

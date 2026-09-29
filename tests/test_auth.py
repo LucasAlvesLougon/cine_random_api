@@ -155,6 +155,85 @@ def test_google_login_does_not_silently_link_local_account(client, monkeypatch):
     assert "vincular" in response.json()["detail"].lower()
 
 
+def test_authenticated_user_can_link_matching_google_account(client, auth_headers, monkeypatch, db_session):
+    monkeypatch.setattr(
+        "services.auth_service.id_token.verify_oauth2_token",
+        lambda token, request, audience: {
+            "sub": "google_sub_for_existing_email",
+            "email": "tester@example.com",
+            "email_verified": True,
+        },
+    )
+
+    response = client.post(
+        "/auth/google/link",
+        headers=auth_headers,
+        json={"credential": "valid-google-id-token"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "detail": "Conta Google vinculada com sucesso.",
+        "email": "tester@example.com",
+        "user_id": 1,
+    }
+
+    from models.models import User
+
+    saved_user = db_session.query(User).filter(User.email == "tester@example.com").one()
+    assert saved_user.google_sub == "google_sub_for_existing_email"
+
+
+def test_google_link_rejects_different_verified_email(client, auth_headers, monkeypatch):
+    monkeypatch.setattr(
+        "services.auth_service.id_token.verify_oauth2_token",
+        lambda token, request, audience: {
+            "sub": "google_sub_for_other_email",
+            "email": "other@example.com",
+            "email_verified": True,
+        },
+    )
+
+    response = client.post(
+        "/auth/google/link",
+        headers=auth_headers,
+        json={"credential": "valid-google-id-token"},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "O email do Google deve ser o mesmo da conta atual."
+
+
+def test_google_link_rejects_google_account_linked_to_another_user(client, auth_headers, monkeypatch, db_session):
+    from models.models import User
+
+    other_user = User(
+        email="other@example.com",
+        password_hash="$2b$12$2b2b2b2b2b2b2b2b2b2b2u2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+        google_sub="google_sub_already_linked",
+    )
+    db_session.add(other_user)
+    db_session.commit()
+
+    monkeypatch.setattr(
+        "services.auth_service.id_token.verify_oauth2_token",
+        lambda token, request, audience: {
+            "sub": "google_sub_already_linked",
+            "email": "tester@example.com",
+            "email_verified": True,
+        },
+    )
+
+    response = client.post(
+        "/auth/google/link",
+        headers=auth_headers,
+        json={"credential": "valid-google-id-token"},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Esta conta Google já está vinculada a outro usuário."
+
+
 def test_google_login_rejects_missing_subject(client, monkeypatch):
     monkeypatch.setattr(
         "services.auth_service.id_token.verify_oauth2_token",
