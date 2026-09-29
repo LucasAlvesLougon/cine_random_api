@@ -22,6 +22,13 @@ class GoogleAuthRequest(BaseModel):
     credential: str
     model_config = ConfigDict(extra="forbid")
 
+
+class GoogleLinkResponse(BaseModel):
+    detail: str
+    email: str
+    user_id: int
+
+
 class DemoAuthRequest(BaseModel):
     email: str
     model_config = ConfigDict(extra="forbid")

@@ -29,3 +29,10 @@ class UserRepository:
         self.db.commit()
         self.db.refresh(new_user)
         return new_user
+
+    def link_google_sub(self, user: User, google_sub: str) -> User:
+        """Vincula um identificador Google a um usuário já autenticado."""
+        user.google_sub = google_sub
+        self.db.commit()
+        self.db.refresh(user)
+        return user
