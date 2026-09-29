@@ -4,8 +4,8 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.141.1-009688?logo=fastapi)](https://fastapi.tiangolo.com/)
 [![SQLAlchemy 2.0](https://img.shields.io/badge/SQLAlchemy-2.0.52-red)](https://www.sqlalchemy.org/)
 [![Pydantic v2](https://img.shields.io/badge/Pydantic-v2.13.5-e92063?logo=pydantic)](https://docs.pydantic.dev/)
-[![Pytest](https://img.shields.io/badge/Pytest-23%2F23_Passed-green?logo=pytest)](https://docs.pytest.org/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Render-336791?logo=postgresql)](https://www.postgresql.org/)
+[![Pytest](https://img.shields.io/badge/Pytest-tested-green?logo=pytest)](https://docs.pytest.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-supported-336791?logo=postgresql)](https://www.postgresql.org/)
 
 API RESTful assíncrona que alimenta o ecossistema **Cine Random**, desenvolvida em **Python 3.11+** com **FastAPI** e **SQLAlchemy 2.0**, seguindo estritamente os princípios de **Clean Architecture** (Routers → Services → Repositories).
 
@@ -21,7 +21,7 @@ O backend conta com comunicação bidirecional em tempo real via **WebSockets au
 * **PyJWT & Bcrypt:** Hashing seguro de senhas e geração de Bearer Tokens assinados.
 * **Google Auth:** Validação server-side de tokens Google Identity.
 * **Astral uv:** Gerenciamento de dependências e ambientes virtuais ultrarrápido.
-* **Pytest & TestClient:** Suíte de testes automatizados com banco isolado em memória (**23/23 testes verdes**).
+* **Pytest & TestClient:** Suíte de testes automatizados com banco isolado em memória.
 
 ---
 
@@ -59,6 +59,13 @@ cine_random_api/
 | `POST` | `/auth/signup` | ❌ | 5 req/min | Criação de novo usuário com senha criptografada. |
 | `POST` | `/auth/login` | ❌ | 10 req/min | Login com email/senha e emissão do token JWT. |
 | `POST` | `/auth/google` | ❌ | 10 req/min | Autenticação com Google ID Token. |
+| `POST` | `/auth/demo` | ❌ | 10 req/min | Login simulado, somente quando habilitado em desenvolvimento. |
+
+### 🩺 Saúde (`/health`)
+| Método | Rota | Descrição |
+| :--- | :--- | :--- |
+| `GET` | `/health/live` | Confirma que o processo HTTP responde. |
+| `GET` | `/health/ready` | Confirma API e conexão com banco (`SELECT 1`). |
 
 ### 🎬 Listas e Filmes (`/lists`)
 | Método | Rota | Auth | Descrição |
@@ -113,6 +120,7 @@ GOOGLE_CLIENT_ID=seu_client_id.apps.googleusercontent.com
 uv sync
 
 # 2. Executar o servidor FastAPI em desenvolvimento (porta 8000)
+uv run alembic upgrade head
 uv run uvicorn main:app --reload --port 8000
 
 # 3. Executar a suíte completa de testes com Pytest
@@ -121,4 +129,5 @@ uv run pytest
 
 Documentação OpenAPI interativa disponível em `http://localhost:8000/docs` e ReDoc em `http://localhost:8000/redoc`.
 
+Veja [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) para deploy, rollback, migração do banco e configuração gratuita contra cold start.
 
