@@ -27,6 +27,13 @@ def test_readiness_checks_database(client):
     assert response.json() == {"status": "ready"}
 
 
+def test_readiness_accepts_head_requests(client):
+    response = client.head("/health/ready")
+
+    assert response.status_code == 200
+    assert response.content == b""
+
+
 def test_readiness_returns_503_when_database_is_unavailable(client):
     class UnavailableDatabase:
         def execute(self, _statement):
@@ -43,3 +50,20 @@ def test_readiness_returns_503_when_database_is_unavailable(client):
 
     assert response.status_code == 503
     assert response.json() == {"detail": "Database unavailable"}
+
+
+def test_head_readiness_returns_503_when_database_is_unavailable(client):
+    class UnavailableDatabase:
+        def execute(self, _statement):
+            raise OperationalError("SELECT 1", {}, Exception("database unavailable"))
+
+    def override_get_db():
+        yield UnavailableDatabase()
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        response = client.head("/health/ready")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 503
