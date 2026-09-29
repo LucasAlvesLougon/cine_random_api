@@ -9,6 +9,7 @@ from schemas.schemas import (
     UserResponse,
     TokenResponse,
     GoogleAuthRequest,
+    GoogleLinkConfirmationRequest,
     GoogleLinkResponse,
     DemoAuthRequest,
 )
@@ -38,6 +39,16 @@ def login_with_google(req: GoogleAuthRequest, db: Session = Depends(get_db)):
     """Processa autenticação com Google Identity através do AuthService."""
     auth_service = AuthService(db)
     return auth_service.login_with_google(req)
+
+@router.post(
+    "/google/confirm-link",
+    response_model=TokenResponse,
+    dependencies=[Depends(rate_limit(limit=10, window_seconds=60))],
+)
+def confirm_google_link(req: GoogleLinkConfirmationRequest, db: Session = Depends(get_db)):
+    """Confirma a senha local, vincula o Google e cria a sessão."""
+    auth_service = AuthService(db)
+    return auth_service.confirm_google_link(req)
 
 @router.post(
     "/google/link",
