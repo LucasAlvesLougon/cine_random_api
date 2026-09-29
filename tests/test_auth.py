@@ -74,13 +74,18 @@ def test_rate_limit_exceeded(client):
     assert "Muitas tentativas" in blocked_res.json()["detail"]
     limiter.clear()
 
-def test_user_can_login_with_google(client):
-    payload = {
-        "email": "google.user@example.com",
-        "name": "Google User",
-        "google_id": "google_sub_123456"
-    }
-    response = client.post("/auth/google", json=payload)
+def test_user_can_login_with_verified_google_credential(client, monkeypatch, db_session):
+    monkeypatch.setattr(
+        "services.auth_service.id_token.verify_oauth2_token",
+        lambda token, request, audience: {
+            "sub": "google_sub_123456",
+            "email": "google.user@example.com",
+            "email_verified": True,
+            "name": "Google User",
+        },
+    )
+
+    response = client.post("/auth/google", json={"credential": "valid-google-id-token"})
     assert response.status_code == 200
     data = response.json()
     assert "access_token" in data
@@ -88,28 +93,109 @@ def test_user_can_login_with_google(client):
     assert data["email"] == "google.user@example.com"
     assert "user_id" in data
 
-def test_user_can_login_with_google_id_token(client):
-    import json
-    import base64
-    payload_data = {
-        "email": "jwt.google@example.com",
-        "name": "JWT Google User",
-        "sub": "google_sub_jwt_987"
-    }
-    payload_b64 = base64.urlsafe_b64encode(json.dumps(payload_data).encode()).decode().rstrip("=")
-    id_token = f"eyJhbGciOiJSUzI1NiJ9.{payload_b64}.mockSignature"
+    from models.models import User
+    saved_user = db_session.query(User).filter(User.id == data["user_id"]).one()
+    assert saved_user.google_sub == "google_sub_123456"
 
-    response = client.post("/auth/google", json={"idToken": id_token})
-    assert response.status_code == 200
-    data = response.json()
-    assert "access_token" in data
-    assert data["token_type"] == "bearer"
-    assert data["email"] == "jwt.google@example.com"
-    assert "user_id" in data
 
-def test_google_login_invalid_email(client):
-    response = client.post("/auth/google", json={"email": "email_invalido"})
+def test_google_login_rejects_forged_token(client, monkeypatch):
+    def reject_token(token, request, audience):
+        raise ValueError("invalid signature")
+
+    monkeypatch.setattr(
+        "services.auth_service.id_token.verify_oauth2_token",
+        reject_token,
+    )
+
+    response = client.post("/auth/google", json={"credential": "forged.jwt.token"})
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Credencial do Google inválida ou expirada."
+
+
+def test_google_login_rejects_unverified_email(client, monkeypatch):
+    monkeypatch.setattr(
+        "services.auth_service.id_token.verify_oauth2_token",
+        lambda token, request, audience: {
+            "sub": "google_sub_unverified",
+            "email": "unverified@example.com",
+            "email_verified": False,
+        },
+    )
+
+    response = client.post("/auth/google", json={"credential": "valid-but-unverified"})
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "O Google não confirmou este endereço de email."
+
+
+def test_google_login_rejects_direct_email_without_credential(client):
+    response = client.post("/auth/google", json={"email": "victim@example.com"})
+
     assert response.status_code == 422
-    assert "O token do Google não contém um e-mail válido" in response.json()["detail"]
+
+
+def test_google_login_does_not_silently_link_local_account(client, monkeypatch):
+    client.post(
+        "/auth/signup",
+        json={"email": "existing@example.com", "password": "securepassword123"},
+    )
+    monkeypatch.setattr(
+        "services.auth_service.id_token.verify_oauth2_token",
+        lambda token, request, audience: {
+            "sub": "google_sub_for_existing_email",
+            "email": "existing@example.com",
+            "email_verified": True,
+        },
+    )
+
+    response = client.post("/auth/google", json={"credential": "valid-google-id-token"})
+
+    assert response.status_code == 409
+    assert "vincular" in response.json()["detail"].lower()
+
+
+def test_google_login_rejects_missing_subject(client, monkeypatch):
+    monkeypatch.setattr(
+        "services.auth_service.id_token.verify_oauth2_token",
+        lambda token, request, audience: {
+            "email": "missing-sub@example.com",
+            "email_verified": True,
+        },
+    )
+
+    response = client.post("/auth/google", json={"credential": "missing-sub"})
+
+    assert response.status_code == 401
+
+
+def test_demo_login_is_disabled_by_default(client, monkeypatch):
+    from config import settings
+    monkeypatch.setattr(settings, "ALLOW_DEMO_AUTH", False, raising=False)
+
+    response = client.post("/auth/demo", json={"email": "demo@example.com"})
+
+    assert response.status_code == 404
+
+
+def test_demo_login_is_never_available_in_production(client, monkeypatch):
+    from config import settings
+    monkeypatch.setattr(settings, "ALLOW_DEMO_AUTH", True, raising=False)
+    monkeypatch.setattr(settings, "ENVIRONMENT", "production", raising=False)
+
+    response = client.post("/auth/demo", json={"email": "demo@example.com"})
+
+    assert response.status_code == 404
+
+
+def test_demo_login_works_only_when_explicitly_enabled(client, monkeypatch):
+    from config import settings
+    monkeypatch.setattr(settings, "ALLOW_DEMO_AUTH", True, raising=False)
+    monkeypatch.setattr(settings, "ENVIRONMENT", "development", raising=False)
+
+    response = client.post("/auth/demo", json={"email": "demo@example.com"})
+
+    assert response.status_code == 200
+    assert response.json()["email"] == "demo@example.com"
 
 

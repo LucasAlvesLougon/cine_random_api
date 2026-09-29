@@ -19,12 +19,12 @@ class TokenResponse(BaseModel):
     user_id: Optional[int] = None
 
 class GoogleAuthRequest(BaseModel):
-    idToken: Optional[str] = None
-    credential: Optional[str] = None
-    token: Optional[str] = None
-    email: Optional[str] = None
-    name: Optional[str] = None
-    google_id: Optional[str] = None
+    credential: str
+    model_config = ConfigDict(extra="forbid")
+
+class DemoAuthRequest(BaseModel):
+    email: str
+    model_config = ConfigDict(extra="forbid")
 
 
 # --- LISTAS ---

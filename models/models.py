@@ -16,6 +16,7 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True, nullable=False)
     password_hash = Column(String, nullable=False)
+    google_sub = Column(String, unique=True, index=True, nullable=True)
 
     lists = relationship("MovieList", back_populates="owner")
     joined_lists = relationship("MovieList", secondary=user_lists_association, back_populates="members")
@@ -75,7 +76,7 @@ class DrawHistory(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     list_id = Column(Integer, ForeignKey("lists.id"), index=True)
-    movie_id = Column(Integer, ForeignKey("movies.id"), nullable=True)
+    movie_id = Column(Integer, ForeignKey("movies.id"), nullable=True, index=True)
     movie_title = Column(String, nullable=False)
     movie_poster = Column(String, nullable=True)
     draw_type = Column(String, default="roulette")  # "roulette" ou "match"
