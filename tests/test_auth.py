@@ -155,6 +155,71 @@ def test_google_login_does_not_silently_link_local_account(client, monkeypatch):
     assert "vincular" in response.json()["detail"].lower()
 
 
+def test_google_login_can_confirm_local_account_with_password(client, monkeypatch, db_session):
+    client.post(
+        "/auth/signup",
+        json={"email": "existing@example.com", "password": "securepassword123"},
+    )
+    monkeypatch.setattr(
+        "services.auth_service.id_token.verify_oauth2_token",
+        lambda token, request, audience: {
+            "sub": "google_sub_for_existing_email",
+            "email": "existing@example.com",
+            "email_verified": True,
+        },
+    )
+
+    response = client.post(
+        "/auth/google/confirm-link",
+        json={
+            "credential": "valid-google-id-token",
+            "password": "securepassword123",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["email"] == "existing@example.com"
+    assert "access_token" in response.json()
+
+    from models.models import User
+
+    saved_user = db_session.query(User).filter(User.email == "existing@example.com").one()
+    assert saved_user.google_sub == "google_sub_for_existing_email"
+
+
+def test_google_login_confirmation_rejects_wrong_password_without_linking(
+    client, monkeypatch, db_session
+):
+    client.post(
+        "/auth/signup",
+        json={"email": "existing@example.com", "password": "securepassword123"},
+    )
+    monkeypatch.setattr(
+        "services.auth_service.id_token.verify_oauth2_token",
+        lambda token, request, audience: {
+            "sub": "google_sub_for_existing_email",
+            "email": "existing@example.com",
+            "email_verified": True,
+        },
+    )
+
+    response = client.post(
+        "/auth/google/confirm-link",
+        json={
+            "credential": "valid-google-id-token",
+            "password": "wrongpassword",
+        },
+    )
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Email ou senha incorretos."
+
+    from models.models import User
+
+    saved_user = db_session.query(User).filter(User.email == "existing@example.com").one()
+    assert saved_user.google_sub is None
+
+
 def test_authenticated_user_can_link_matching_google_account(client, auth_headers, monkeypatch, db_session):
     monkeypatch.setattr(
         "services.auth_service.id_token.verify_oauth2_token",

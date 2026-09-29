@@ -8,7 +8,12 @@ from sqlalchemy.orm import Session
 
 from config import settings
 from repositories.user_repository import UserRepository
-from schemas.schemas import UserCreate, GoogleAuthRequest, DemoAuthRequest
+from schemas.schemas import (
+    UserCreate,
+    GoogleAuthRequest,
+    GoogleLinkConfirmationRequest,
+    DemoAuthRequest,
+)
 from utils.security import get_password_hash, verify_password, create_access_token
 
 class AuthService:
@@ -108,6 +113,42 @@ class AuthService:
             "token_type": "bearer",
             "email": user.email,
             "user_id": user.id
+        }
+
+    def confirm_google_link(self, req: GoogleLinkConfirmationRequest) -> dict:
+        """Confirma a senha local antes de vincular uma identidade Google."""
+        normalized_email, google_sub = self._verify_google_credential(req.credential)
+        user = self.user_repo.get_by_email(normalized_email)
+
+        if not user or not verify_password(req.password, user.password_hash):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Email ou senha incorretos.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        linked_user = self.user_repo.get_by_google_sub(google_sub)
+        if linked_user and linked_user.id != user.id:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Esta conta Google já está vinculada a outro usuário.",
+            )
+
+        if user.google_sub and user.google_sub != google_sub:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Esta conta já está vinculada a outra conta Google.",
+            )
+
+        if not user.google_sub:
+            self.user_repo.link_google_sub(user, google_sub)
+
+        access_token = create_access_token(data={"sub": user.email})
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "email": user.email,
+            "user_id": user.id,
         }
 
     def link_google_account(self, req: GoogleAuthRequest, current_user) -> dict:
