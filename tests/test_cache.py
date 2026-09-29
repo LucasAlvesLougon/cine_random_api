@@ -63,4 +63,6 @@ def test_api_caching_and_invalidation(client, auth_headers):
     assert res2.status_code == 200
     assert len(res2.json()) == 1
     assert res2.json()[0]["title"] == "O Poderoso Chefão"
-    assert cache.get("movies:CACHE01") is not None
+    cached_movies = cache.get("movies:CACHE01")
+    assert cached_movies is not None
+    assert all(isinstance(movie, dict) for movie in cached_movies)
