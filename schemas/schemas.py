@@ -1,12 +1,12 @@
-from pydantic import BaseModel, ConfigDict
-from typing import List, Optional, Dict, Any
+from pydantic import BaseModel, ConfigDict, Field
+from typing import List, Optional, Dict, Any, Literal
 
 # --- USERS & AUTH ---
 class UserBase(BaseModel):
     email: str
 
 class UserCreate(UserBase):
-    password: str
+    password: str = Field(min_length=8, max_length=128)
 
 class UserResponse(UserBase):
     id: int
@@ -42,8 +42,8 @@ class DemoAuthRequest(BaseModel):
 
 # --- LISTAS ---
 class MovieListBase(BaseModel):
-    name: str
-    code: str
+    name: str = Field(min_length=1, max_length=120)
+    code: str = Field(min_length=4, max_length=32, pattern=r"^[A-Za-z0-9_-]+$")
 
 class MovieListCreate(MovieListBase):
     pass
@@ -62,33 +62,31 @@ class MemberResponse(BaseModel):
 # --- FILMES ---
 class MovieBase(BaseModel):
     tmdbId: int
-    title: str
-    posterUrl: Optional[str] = None
-    backdropUrl: Optional[str] = None
-    synopsis: Optional[str] = None
-    genres: Optional[List[str]] = []
-    releaseYear: Optional[str] = None
-    runtime: Optional[int] = None
-    tmdbRating: Optional[float] = None
+    title: str = Field(min_length=1, max_length=300)
+    posterUrl: Optional[str] = Field(default=None, max_length=1000)
+    backdropUrl: Optional[str] = Field(default=None, max_length=1000)
+    synopsis: Optional[str] = Field(default=None, max_length=5000)
+    genres: Optional[List[str]] = Field(default_factory=list)
+    releaseYear: Optional[str] = Field(default=None, max_length=10)
+    runtime: Optional[int] = Field(default=None, ge=0, le=1000)
+    tmdbRating: Optional[float] = Field(default=None, ge=0, le=10)
     watched: bool = False
-    watchProviders: Optional[List[Dict[str, Any]]] = []
-    trailerKey: Optional[str] = None
+    watchProviders: Optional[List[Dict[str, Any]]] = Field(default_factory=list)
+    trailerKey: Optional[str] = Field(default=None, max_length=200)
 
 class MovieCreate(MovieBase):
     pass
 
-class CommentBase(BaseModel):
-    user_id: str
-    user_name: str
-    text: str
-    rating: int
+class CommentCreate(BaseModel):
+    text: str = Field(min_length=1, max_length=2000)
+    rating: int = Field(ge=1, le=5)
+    model_config = ConfigDict(extra="forbid")
 
-class CommentCreate(CommentBase):
-    pass
-
-class CommentResponse(CommentBase):
+class CommentResponse(CommentCreate):
     id: int
     movie_id: int
+    user_id: str
+    user_name: str
     created_at: str
     model_config = ConfigDict(from_attributes=True)
 
@@ -99,18 +97,20 @@ class MovieResponse(MovieBase):
     model_config = ConfigDict(from_attributes=True)
 
 # --- HISTÓRICO DE SORTEIOS ---
-class DrawHistoryBase(BaseModel):
+class DrawHistoryCreate(BaseModel):
     movie_id: Optional[int] = None
-    movie_title: str
-    movie_poster: Optional[str] = None
-    draw_type: str = "roulette"
-    drawn_by: Optional[str] = None
+    movie_title: str = Field(min_length=1, max_length=300)
+    movie_poster: Optional[str] = Field(default=None, max_length=1000)
+    draw_type: Literal["roulette", "discovery", "match"] = "roulette"
+    model_config = ConfigDict(extra="forbid")
 
-class DrawHistoryCreate(DrawHistoryBase):
-    pass
-
-class DrawHistoryResponse(DrawHistoryBase):
+class DrawHistoryResponse(DrawHistoryCreate):
     id: int
     list_id: int
+    drawn_by: Optional[str] = None
     drawn_at: str
     model_config = ConfigDict(from_attributes=True)
+
+class WebSocketTicketResponse(BaseModel):
+    ticket: str
+    expires_in: int

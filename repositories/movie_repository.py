@@ -1,5 +1,6 @@
 from typing import List, Optional
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from datetime import datetime, timezone, timedelta
 from models.models import Movie, MovieList, User, Comment, DrawHistory
 
@@ -52,7 +53,11 @@ class MovieRepository:
     def add_member_to_list(self, movie_list: MovieList, user: User) -> MovieList:
         """Adiciona um usuário como membro de uma lista."""
         movie_list.members.append(user)
-        self.db.commit()
+        try:
+            self.db.commit()
+        except IntegrityError:
+            self.db.rollback()
+            raise
         self.db.refresh(movie_list)
         return movie_list
 
@@ -94,7 +99,11 @@ class MovieRepository:
         """Cria e persiste um novo filme na lista."""
         new_movie = Movie(**movie_data, list_id=list_id)
         self.db.add(new_movie)
-        self.db.commit()
+        try:
+            self.db.commit()
+        except IntegrityError:
+            self.db.rollback()
+            raise
         self.db.refresh(new_movie)
         return new_movie
 

@@ -1,5 +1,6 @@
 from fastapi import HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
 
 from repositories.movie_repository import MovieRepository
@@ -16,19 +17,24 @@ from schemas.schemas import (
 )
 from sockets import manager
 from utils.cache import cache
-from utils.security import decode_token
+from utils.websocket_auth import websocket_tickets
 
 class MovieService:
     def __init__(self, db: Session):
         self.movie_repo = MovieRepository(db)
         self.user_repo = UserRepository(db)
 
-    def can_connect_websocket(self, token: str, list_code: str) -> bool:
-        """Valida identidade e participação na lista sem expor SQL ao router."""
-        email = decode_token(token)
-        if not email:
+    def issue_websocket_ticket(self, list_code: str, current_user: User) -> tuple[str, int]:
+        db_list = self.movie_repo.get_list_by_code(list_code)
+        self._verify_list_access(db_list, current_user)
+        return websocket_tickets.issue(current_user.id, list_code)
+
+    def can_connect_websocket(self, ticket: str, list_code: str) -> bool:
+        """Valida ticket efêmero, identidade e participação na lista."""
+        user_id = websocket_tickets.consume(ticket, list_code)
+        if user_id is None:
             return False
-        user = self.user_repo.get_by_email(email)
+        user = self.user_repo.get_by_id(user_id)
         if not user:
             return False
         movie_list = self.movie_repo.get_list_by_code(list_code)
@@ -65,8 +71,14 @@ class MovieService:
                 detail="Você já está nesta lista."
             )
 
-        updated_list = self.movie_repo.add_member_to_list(db_list, current_user)
-        cache.delete(f"members:{list_code}")
+        try:
+            updated_list = self.movie_repo.add_member_to_list(db_list, current_user)
+        except IntegrityError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Você já está nesta lista.",
+            ) from exc
+        cache.delete_prefix(f"members:{list_code}:")
         cache.delete_prefix("user_lists:")
         return updated_list
 
@@ -117,7 +129,7 @@ class MovieService:
 
         self.movie_repo.delete_list(db_list)
         cache.delete_prefix(f"movies:{list_code}")
-        cache.delete_prefix(f"members:{list_code}")
+        cache.delete_prefix(f"members:{list_code}:")
         cache.delete_prefix(f"history:{list_code}")
         cache.delete_prefix("user_lists:")
         return {"message": "Lista removida com sucesso"}
@@ -150,7 +162,7 @@ class MovieService:
         db_list = self.movie_repo.get_list_by_code(list_code)
         self._verify_list_access(db_list, current_user)
 
-        cache_key = f"members:{list_code}"
+        cache_key = f"members:{list_code}:{current_user.id}"
         cached = cache.get(cache_key)
         if cached is not None:
             return cached
@@ -183,7 +195,7 @@ class MovieService:
             )
 
         self.movie_repo.remove_member_from_list(db_list, target_user)
-        cache.delete(f"members:{list_code}")
+        cache.delete_prefix(f"members:{list_code}:")
         cache.delete_prefix("user_lists:")
         background_tasks.add_task(manager.broadcast_refresh, list_code)
         return {"message": "Participante removido com sucesso"}
@@ -194,7 +206,7 @@ class MovieService:
         db_list = self.movie_repo.get_list_by_code(list_code)
         self._verify_list_access(db_list, current_user)
 
-        cache_key = f"movies:{list_code}"
+        cache_key = f"movies:{list_code}:{current_user.id}"
         cached = cache.get(cache_key)
         if cached is not None:
             return cached
@@ -218,8 +230,14 @@ class MovieService:
                 detail="Filme já existe nesta lista."
             )
 
-        new_movie = self.movie_repo.create_movie(db_list.id, movie.model_dump())
-        cache.delete(f"movies:{list_code}")
+        try:
+            new_movie = self.movie_repo.create_movie(db_list.id, movie.model_dump())
+        except IntegrityError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Filme já existe nesta lista.",
+            ) from exc
+        cache.delete_prefix(f"movies:{list_code}:")
         background_tasks.add_task(manager.broadcast_refresh, list_code)
         return new_movie
 
@@ -236,7 +254,7 @@ class MovieService:
 
         updated_movie = self.movie_repo.toggle_movie_watched(movie)
         list_code = updated_movie.movie_list.code
-        cache.delete(f"movies:{list_code}")
+        cache.delete_prefix(f"movies:{list_code}:")
         background_tasks.add_task(manager.broadcast_refresh, list_code)
         return updated_movie
 
@@ -253,7 +271,7 @@ class MovieService:
 
         list_code = movie.movie_list.code
         self.movie_repo.delete_movie(movie)
-        cache.delete(f"movies:{list_code}")
+        cache.delete_prefix(f"movies:{list_code}:")
         background_tasks.add_task(manager.broadcast_refresh, list_code)
         return {"message": "Filme removido com sucesso"}
 
@@ -269,9 +287,13 @@ class MovieService:
 
         self._verify_list_access(movie.movie_list, current_user)
 
-        new_comment = self.movie_repo.add_comment(movie_id, comment.model_dump())
+        new_comment = self.movie_repo.add_comment(movie_id, {
+            **comment.model_dump(),
+            "user_id": str(current_user.id),
+            "user_name": current_user.email,
+        })
         list_code = movie.movie_list.code
-        cache.delete(f"movies:{list_code}")
+        cache.delete_prefix(f"movies:{list_code}:")
         background_tasks.add_task(manager.broadcast_refresh, list_code)
         return new_comment
 
@@ -281,8 +303,11 @@ class MovieService:
         db_list = self.movie_repo.get_list_by_code(list_code)
         self._verify_list_access(db_list, current_user)
 
-        new_entry = self.movie_repo.add_draw_history(db_list.id, history.model_dump())
-        cache.delete_prefix(f"history:{list_code}")
+        new_entry = self.movie_repo.add_draw_history(db_list.id, {
+            **history.model_dump(),
+            "drawn_by": str(current_user.id),
+        })
+        cache.delete_prefix(f"history:{list_code}:")
         background_tasks.add_task(manager.broadcast_refresh, list_code)
         return new_entry
 
@@ -291,7 +316,7 @@ class MovieService:
         db_list = self.movie_repo.get_list_by_code(list_code)
         self._verify_list_access(db_list, current_user)
 
-        cache_key = f"history:{list_code}:{limit}"
+        cache_key = f"history:{list_code}:{current_user.id}:{limit}"
         cached = cache.get(cache_key)
         if cached is not None:
             return cached
@@ -309,7 +334,7 @@ class MovieService:
         self._verify_list_access(db_list, current_user)
 
         deleted_count = self.movie_repo.cleanup_old_draw_history(db_list.id, days=days)
-        cache.delete_prefix(f"history:{list_code}")
+        cache.delete_prefix(f"history:{list_code}:")
         if background_tasks:
             background_tasks.add_task(manager.broadcast_refresh, list_code)
         return {

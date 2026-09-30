@@ -29,6 +29,11 @@ def test_production_rejects_development_secret():
         )
 
 
+def test_production_disables_demo_authentication():
+    with pytest.raises(ValidationError, match="ALLOW_DEMO_AUTH"):
+        Settings(_env_file=None, **{**PRODUCTION_CONFIG, "ALLOW_DEMO_AUTH": True})
+
+
 def test_development_has_safe_local_defaults():
     settings = Settings(_env_file=None)
 

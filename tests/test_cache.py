@@ -44,7 +44,8 @@ def test_api_caching_and_invalidation(client, auth_headers):
     res1 = client.get("/lists/CACHE01/movies", headers=auth_headers)
     assert res1.status_code == 200
     assert len(res1.json()) == 0
-    assert cache.get("movies:CACHE01") is not None
+    cache_key = "movies:CACHE01:1"
+    assert cache.get(cache_key) is not None
     
     # 3. Adiciona filme (invalida cache)
     movie_payload = {
@@ -56,13 +57,13 @@ def test_api_caching_and_invalidation(client, auth_headers):
     assert add_res.status_code == 200
     
     # O cache deve ter sido invalidado
-    assert cache.get("movies:CACHE01") is None
+    assert cache.get(cache_key) is None
     
     # 4. Nova busca atualizada
     res2 = client.get("/lists/CACHE01/movies", headers=auth_headers)
     assert res2.status_code == 200
     assert len(res2.json()) == 1
     assert res2.json()[0]["title"] == "O Poderoso Chefão"
-    cached_movies = cache.get("movies:CACHE01")
+    cached_movies = cache.get(cache_key)
     assert cached_movies is not None
     assert all(isinstance(movie, dict) for movie in cached_movies)
