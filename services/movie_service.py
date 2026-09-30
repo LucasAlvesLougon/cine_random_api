@@ -234,6 +234,35 @@ class MovieService:
         cache.set(cache_key, movies, ttl=180)
         return movies
 
+    def get_movies_page(self, list_code: str, current_user: User, page: int, page_size: int) -> dict:
+        """Retorna filmes em páginas para evitar respostas ilimitadas em listas grandes."""
+        db_list = self.movie_repo.get_list_by_code(list_code)
+        self._verify_list_access(db_list, current_user)
+
+        cache_key = f"movies:{list_code}:{current_user.id}:page:{page}:{page_size}"
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        movies, total = self.movie_repo.get_movies_for_list(
+            db_list.id,
+            offset=(page - 1) * page_size,
+            limit=page_size,
+        )
+        items = [
+            MovieResponse.model_validate(movie).model_dump(mode="json")
+            for movie in movies
+        ]
+        result = {
+            "items": items,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "has_next": page * page_size < total,
+        }
+        cache.set(cache_key, result, ttl=180)
+        return result
+
     def add_movie(self, list_code: str, movie: MovieCreate, current_user: User, background_tasks: BackgroundTasks) -> Movie:
         """Adiciona um filme validando permissão de lista, duplicidade, invalidando cache e disparando broadcast."""
         db_list = self.movie_repo.get_list_by_code(list_code)

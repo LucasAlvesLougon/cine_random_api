@@ -30,8 +30,8 @@ jobs:
       - name: Install Dependencies
         run: uv sync --frozen
 
-      - name: Run Automated Tests
-        run: uv run pytest -v
+      - name: Run Automated Tests with Coverage Gate
+        run: uv run pytest -v --cov=services --cov=routers --cov=utils --cov-report=term-missing --cov-fail-under=35
         env:
           SECRET_KEY: ${{ secrets.SECRET_KEY || 'ci_test_secret_key_super_secure_32_bytes_long_minimum' }}
           DATABASE_URL: sqlite:///./ci_test.db

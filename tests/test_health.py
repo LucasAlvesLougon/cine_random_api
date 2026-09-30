@@ -19,6 +19,16 @@ def test_responses_include_security_headers(client):
     assert response.headers["referrer-policy"] == "no-referrer"
     assert response.headers["permissions-policy"] == "camera=(), microphone=(), geolocation=()"
     assert "default-src 'self'" in response.headers["content-security-policy"]
+    assert response.headers.get("x-request-id")
+
+
+def test_metrics_endpoint_exposes_request_counter(client):
+    client.get("/health/live")
+
+    response = client.get("/metrics")
+
+    assert response.status_code == 200
+    assert "cine_random_http_requests_total" in response.text
 
 
 def test_readiness_checks_database(client):

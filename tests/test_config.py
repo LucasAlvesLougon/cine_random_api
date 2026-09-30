@@ -8,6 +8,7 @@ PRODUCTION_CONFIG = {
     "ENVIRONMENT": "production",
     "SECRET_KEY": "a-production-secret-with-at-least-32-bytes",
     "GOOGLE_CLIENT_ID": "client.apps.googleusercontent.com",
+    "TMDB_API_KEY": "tmdb-test-key",
 }
 
 
@@ -19,6 +20,11 @@ def test_production_requires_strong_secret_key():
 def test_production_requires_google_client_id():
     with pytest.raises(ValidationError, match="GOOGLE_CLIENT_ID"):
         Settings(_env_file=None, **{**PRODUCTION_CONFIG, "GOOGLE_CLIENT_ID": ""})
+
+
+def test_production_requires_tmdb_credentials():
+    with pytest.raises(ValidationError, match="TMDB_API_KEY"):
+        Settings(_env_file=None, **{**PRODUCTION_CONFIG, "TMDB_API_KEY": None})
 
 
 def test_production_rejects_development_secret():

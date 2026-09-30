@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, BackgroundTasks, status, Query
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import List, Optional, Union
 
 from database.connection import get_db
 from sockets import manager
@@ -8,7 +8,8 @@ from models.models import User
 from schemas.schemas import (
     MovieCreate, MovieResponse, MovieListCreate,
     MovieListResponse, MovieListUpdate, CommentCreate, CommentResponse,
-    DrawHistoryCreate, DrawHistoryResponse, MemberResponse, WebSocketTicketResponse, InviteResponse
+    DrawHistoryCreate, DrawHistoryResponse, MemberResponse, WebSocketTicketResponse, InviteResponse,
+    MoviePageResponse,
 )
 from services.movie_service import MovieService
 from utils.security import get_current_user
@@ -63,10 +64,18 @@ def remove_list_member(list_code: str, user_id: int, background_tasks: Backgroun
     service = MovieService(db)
     return service.remove_list_member(list_code, user_id, current_user, background_tasks)
 
-@router.get("/{list_code}/movies", response_model=List[MovieResponse])
-def get_movies(list_code: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    """Retorna todos os filmes de uma lista."""
+@router.get("/{list_code}/movies", response_model=Union[List[MovieResponse], MoviePageResponse])
+def get_movies(
+    list_code: str,
+    page: Optional[int] = Query(None, ge=1, le=10000),
+    page_size: int = Query(50, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Retorna filmes; use page/page_size para respostas paginadas."""
     service = MovieService(db)
+    if page is not None:
+        return service.get_movies_page(list_code, current_user, page=page, page_size=page_size)
     return service.get_movies(list_code, current_user)
 
 @router.post("/{list_code}/ws-ticket", response_model=WebSocketTicketResponse)

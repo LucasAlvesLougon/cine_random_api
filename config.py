@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     SMTP_USERNAME: str | None = None
     SMTP_PASSWORD: str | None = None
     PASSWORD_RESET_FROM_EMAIL: str | None = None
+    TMDB_API_KEY: str | None = None
+    TMDB_API_READ_ACCESS_TOKEN: str | None = None
+    TMDB_BASE_URL: str = "https://api.themoviedb.org/3"
+    TMDB_TIMEOUT_SECONDS: float = 8.0
     UPSTASH_REDIS_REST_URL: str | None = None
     UPSTASH_REDIS_REST_TOKEN: str | None = None
 
@@ -39,6 +43,8 @@ class Settings(BaseSettings):
             raise ValueError("SECRET_KEY must be a strong, production-specific secret")
         if not self.GOOGLE_CLIENT_ID.strip():
             raise ValueError("GOOGLE_CLIENT_ID is required in production")
+        if not (self.TMDB_API_KEY or self.TMDB_API_READ_ACCESS_TOKEN):
+            raise ValueError("TMDB_API_KEY or TMDB_API_READ_ACCESS_TOKEN is required in production")
         if self.ALLOW_DEMO_AUTH:
             raise ValueError("ALLOW_DEMO_AUTH must be disabled in production")
         return self
