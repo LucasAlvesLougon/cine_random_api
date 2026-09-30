@@ -1,6 +1,7 @@
-from sqlalchemy import Column, Integer, String, Boolean, Float, ForeignKey, JSON, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Boolean, Float, ForeignKey, JSON, UniqueConstraint, DateTime
 from sqlalchemy.orm import relationship
 from database.connection import Base
+from datetime import datetime
 
 from sqlalchemy import Table
 
@@ -21,6 +22,20 @@ class User(Base):
 
     lists = relationship("MovieList", back_populates="owner")
     joined_lists = relationship("MovieList", secondary=user_lists_association, back_populates="members")
+    password_reset_tokens = relationship("PasswordResetToken", back_populates="user", cascade="all, delete-orphan")
+
+
+class PasswordResetToken(Base):
+    __tablename__ = "password_reset_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    token_hash = Column(String, unique=True, nullable=False, index=True)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    used_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+
+    user = relationship("User", back_populates="password_reset_tokens")
 
 class MovieList(Base):
     __tablename__ = "lists"
@@ -86,6 +101,7 @@ class DrawHistory(Base):
     draw_type = Column(String, default="roulette")  # "roulette" ou "match"
     drawn_by = Column(String, nullable=True)
     drawn_at = Column(String)
+    archived_at = Column(DateTime(timezone=True), nullable=True)
 
     movie_list = relationship("MovieList", back_populates="draw_history")
     movie = relationship("Movie", back_populates="draw_history")

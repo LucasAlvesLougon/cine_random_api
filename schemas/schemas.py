@@ -40,15 +40,34 @@ class DemoAuthRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class PasswordResetRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=320)
+    model_config = ConfigDict(extra="forbid")
+
+
+class PasswordResetConfirm(BaseModel):
+    token: str = Field(min_length=20, max_length=200)
+    new_password: str = Field(min_length=8, max_length=128)
+    model_config = ConfigDict(extra="forbid")
+
+
+class PasswordResetResponse(BaseModel):
+    detail: str
+
+
 # --- LISTAS ---
 class MovieListBase(BaseModel):
     name: str = Field(min_length=1, max_length=120)
-    code: str = Field(min_length=4, max_length=32, pattern=r"^[A-Za-z0-9_-]+$")
 
 class MovieListCreate(MovieListBase):
-    pass
+    code: Optional[str] = Field(default=None, min_length=4, max_length=32, pattern=r"^[A-Za-z0-9_-]+$")
 
-class MovieListResponse(MovieListBase):
+class MovieListUpdate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+
+class MovieListResponse(BaseModel):
+    name: str
+    code: str
     id: int
     owner_id: Optional[int] = None
     model_config = ConfigDict(from_attributes=True)
@@ -114,3 +133,7 @@ class DrawHistoryResponse(DrawHistoryCreate):
 class WebSocketTicketResponse(BaseModel):
     ticket: str
     expires_in: int
+
+class InviteResponse(BaseModel):
+    code: str
+    join_url: str

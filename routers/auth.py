@@ -12,6 +12,7 @@ from schemas.schemas import (
     GoogleLinkConfirmationRequest,
     GoogleLinkResponse,
     DemoAuthRequest,
+    PasswordResetRequest, PasswordResetConfirm, PasswordResetResponse,
 )
 from services.auth_service import AuthService
 from utils.rate_limit import rate_limit
@@ -33,6 +34,25 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     """Autentica o usuário e retorna um token JWT."""
     auth_service = AuthService(db)
     return auth_service.login(username=form_data.username, password=form_data.password)
+
+@router.post(
+    "/password-reset/request",
+    response_model=PasswordResetResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(rate_limit(limit=5, window_seconds=60))],
+)
+def request_password_reset(req: PasswordResetRequest, db: Session = Depends(get_db)):
+    auth_service = AuthService(db)
+    return auth_service.request_password_reset(req.email)
+
+@router.post(
+    "/password-reset/confirm",
+    response_model=PasswordResetResponse,
+    dependencies=[Depends(rate_limit(limit=5, window_seconds=60))],
+)
+def confirm_password_reset(req: PasswordResetConfirm, db: Session = Depends(get_db)):
+    auth_service = AuthService(db)
+    return auth_service.reset_password(req.token, req.new_password)
 
 @router.post("/google", response_model=TokenResponse, dependencies=[Depends(rate_limit(limit=10, window_seconds=60))])
 def login_with_google(req: GoogleAuthRequest, db: Session = Depends(get_db)):

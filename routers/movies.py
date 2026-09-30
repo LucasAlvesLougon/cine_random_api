@@ -7,8 +7,8 @@ from sockets import manager
 from models.models import User
 from schemas.schemas import (
     MovieCreate, MovieResponse, MovieListCreate,
-    MovieListResponse, CommentCreate, CommentResponse,
-    DrawHistoryCreate, DrawHistoryResponse, MemberResponse, WebSocketTicketResponse
+    MovieListResponse, MovieListUpdate, CommentCreate, CommentResponse,
+    DrawHistoryCreate, DrawHistoryResponse, MemberResponse, WebSocketTicketResponse, InviteResponse
 )
 from services.movie_service import MovieService
 from utils.security import get_current_user
@@ -34,10 +34,16 @@ def create_list(lista: MovieListCreate, db: Session = Depends(get_db), current_u
     return service.create_list(lista, current_user)
 
 @router.put("/{list_code}", response_model=MovieListResponse)
-def update_list(list_code: str, list_data: MovieListCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def update_list(list_code: str, list_data: MovieListUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Atualiza o nome de uma lista."""
     service = MovieService(db)
     return service.update_list(list_code, list_data, current_user)
+
+@router.get("/{list_code}/invite", response_model=InviteResponse)
+def get_invite(list_code: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Retorna um link de convite para uma lista acessível ao usuário."""
+    service = MovieService(db)
+    return service.get_invite(list_code, current_user)
 
 @router.delete("/{list_code}")
 def delete_list(list_code: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -101,14 +107,14 @@ def add_draw_history(list_code: str, history: DrawHistoryCreate, background_task
     return service.add_draw_history(list_code, history, current_user, background_tasks)
 
 @router.get("/{list_code}/history", response_model=List[DrawHistoryResponse])
-def get_draw_history(list_code: str, limit: int = 20, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def get_draw_history(list_code: str, limit: int = Query(20, ge=1, le=100), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Retorna os últimos filmes sorteados na lista."""
     service = MovieService(db)
     return service.get_draw_history(list_code, current_user, limit=limit)
 
 @router.delete("/{list_code}/history/cleanup")
-def cleanup_draw_history(list_code: str, days: int = 7, background_tasks: BackgroundTasks = BackgroundTasks(), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    """Remove registros de sorteios mais antigos que 'days' dias (padrão: 7 dias)."""
+def cleanup_draw_history(list_code: str, days: int = Query(30, ge=1, le=3650), background_tasks: BackgroundTasks = BackgroundTasks(), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Arquiva registros de sorteios mais antigos que 'days' dias (padrão: 30 dias)."""
     service = MovieService(db)
     return service.cleanup_old_draw_history(list_code, current_user, days=days, background_tasks=background_tasks)
 

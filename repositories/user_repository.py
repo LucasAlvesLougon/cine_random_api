@@ -1,6 +1,7 @@
 from typing import Optional
 from sqlalchemy.orm import Session
-from models.models import User
+from datetime import datetime, timezone
+from models.models import User, PasswordResetToken
 
 class UserRepository:
     def __init__(self, db: Session):
@@ -36,3 +37,26 @@ class UserRepository:
         self.db.commit()
         self.db.refresh(user)
         return user
+
+    def create_password_reset_token(self, user: User, token_hash: str, expires_at: datetime) -> PasswordResetToken:
+        self.db.query(PasswordResetToken).filter(
+            PasswordResetToken.user_id == user.id,
+            PasswordResetToken.used_at.is_(None),
+        ).update({"used_at": datetime.now(timezone.utc)}, synchronize_session=False)
+        token = PasswordResetToken(user_id=user.id, token_hash=token_hash, expires_at=expires_at)
+        self.db.add(token)
+        self.db.commit()
+        self.db.refresh(token)
+        return token
+
+    def get_valid_password_reset_token(self, token_hash: str) -> PasswordResetToken | None:
+        return self.db.query(PasswordResetToken).filter(
+            PasswordResetToken.token_hash == token_hash,
+            PasswordResetToken.used_at.is_(None),
+            PasswordResetToken.expires_at > datetime.now(timezone.utc),
+        ).first()
+
+    def consume_password_reset_token(self, token: PasswordResetToken, password_hash: str) -> None:
+        token.user.password_hash = password_hash
+        token.used_at = datetime.now(timezone.utc)
+        self.db.commit()

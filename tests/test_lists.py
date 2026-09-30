@@ -1,29 +1,45 @@
+def create_list(client, headers, name):
+    response = client.post("/lists/", json={"name": name}, headers=headers)
+    assert response.status_code == 200
+    return response.json()
+
+
 def test_create_and_get_my_lists(client, auth_headers):
     # Cria uma lista
-    create_res = client.post(
-        "/lists/",
-        json={"name": "Filmes de Terror", "code": "TERR01"},
-        headers=auth_headers
-    )
-    assert create_res.status_code == 200
-    created_data = create_res.json()
+    created_data = create_list(client, auth_headers, "Filmes de Terror")
     assert created_data["name"] == "Filmes de Terror"
-    assert created_data["code"] == "TERR01"
+    assert len(created_data["code"]) == 8
 
     # Busca listas do usuário
     my_lists_res = client.get("/lists/my", headers=auth_headers)
     assert my_lists_res.status_code == 200
     lists = my_lists_res.json()
     assert len(lists) == 1
-    assert lists[0]["code"] == "TERR01"
+    assert lists[0]["code"] == created_data["code"]
+
+
+def test_invite_is_generated_by_server_and_can_be_shared(client, auth_headers):
+    created = client.post(
+        "/lists/",
+        json={"name": "Convite Seguro", "code": "CLIENT_CODE_SHOULD_BE_IGNORED"},
+        headers=auth_headers,
+    )
+    assert created.status_code == 200
+    list_data = created.json()
+
+    assert len(list_data["code"]) == 8
+    assert list_data["code"] != "CLIENT_CODE_SHOULD_BE_IGNORED"
+
+    invite = client.get(f"/lists/{list_data['code']}/invite", headers=auth_headers)
+    assert invite.status_code == 200
+    assert invite.json() == {
+        "code": list_data["code"],
+        "join_url": f"http://localhost:5173/join/{list_data['code']}",
+    }
 
 def test_add_and_toggle_movie(client, auth_headers):
     # Cria lista primeiro
-    client.post(
-        "/lists/",
-        json={"name": "Lista de Ação", "code": "ACT001"},
-        headers=auth_headers
-    )
+    code = create_list(client, auth_headers, "Lista de Ação")["code"]
 
     # Adiciona filme
     movie_payload = {
@@ -38,7 +54,7 @@ def test_add_and_toggle_movie(client, auth_headers):
         "tmdbRating": 8.7,
         "watched": False
     }
-    add_res = client.post("/lists/ACT001/movies", json=movie_payload, headers=auth_headers)
+    add_res = client.post(f"/lists/{code}/movies", json=movie_payload, headers=auth_headers)
     assert add_res.status_code == 200
     movie_data = add_res.json()
     assert movie_data["title"] == "Matrix"
@@ -51,7 +67,7 @@ def test_add_and_toggle_movie(client, auth_headers):
     assert toggle_res.json()["watched"] is True
 
     # Lista filmes
-    get_movies_res = client.get("/lists/ACT001/movies", headers=auth_headers)
+    get_movies_res = client.get(f"/lists/{code}/movies", headers=auth_headers)
     assert get_movies_res.status_code == 200
     movies = get_movies_res.json()
     assert len(movies) == 1
@@ -62,14 +78,14 @@ def test_add_and_toggle_movie(client, auth_headers):
     assert del_res.status_code == 200
     
     # Verifica lista vazia
-    movies_after_del = client.get("/lists/ACT001/movies", headers=auth_headers).json()
+    movies_after_del = client.get(f"/lists/{code}/movies", headers=auth_headers).json()
     assert len(movies_after_del) == 0
 
 def test_add_comment_and_rating(client, auth_headers):
     # Cria lista e adiciona filme
-    client.post("/lists/", json={"name": "Cinema Clube", "code": "CLB01"}, headers=auth_headers)
+    code = create_list(client, auth_headers, "Cinema Clube")["code"]
     movie_res = client.post(
-        "/lists/CLB01/movies",
+        f"/lists/{code}/movies",
         json={"title": "Inception", "tmdbId": 27205, "releaseYear": "2010"},
         headers=auth_headers
     )
@@ -89,7 +105,7 @@ def test_add_comment_and_rating(client, auth_headers):
     assert comment_data["user_name"] == "tester@example.com"
 
     # Verifica se o filme na lista traz o comentário
-    movies_res = client.get("/lists/CLB01/movies", headers=auth_headers)
+    movies_res = client.get(f"/lists/{code}/movies", headers=auth_headers)
     assert movies_res.status_code == 200
     movie = movies_res.json()[0]
     assert len(movie["comments"]) == 1
@@ -97,7 +113,7 @@ def test_add_comment_and_rating(client, auth_headers):
 
 def test_add_and_get_draw_history(client, auth_headers):
     # Cria lista
-    client.post("/lists/", json={"name": "Sessão Pipoca", "code": "PIP01"}, headers=auth_headers)
+    code = create_list(client, auth_headers, "Sessão Pipoca")["code"]
 
     # Registra sorteio no histórico
     history_payload = {
@@ -105,7 +121,7 @@ def test_add_and_get_draw_history(client, auth_headers):
         "movie_poster": "https://image.tmdb.org/t/p/w500/interstellar.jpg",
         "draw_type": "roulette",
     }
-    post_res = client.post("/lists/PIP01/history", json=history_payload, headers=auth_headers)
+    post_res = client.post(f"/lists/{code}/history", json=history_payload, headers=auth_headers)
     assert post_res.status_code == 200
     history_data = post_res.json()
     assert history_data["movie_title"] == "Interestelar"
@@ -114,7 +130,7 @@ def test_add_and_get_draw_history(client, auth_headers):
     assert "drawn_at" in history_data
 
     # Consulta histórico
-    get_res = client.get("/lists/PIP01/history", headers=auth_headers)
+    get_res = client.get(f"/lists/{code}/history", headers=auth_headers)
     assert get_res.status_code == 200
     history_list = get_res.json()
     assert len(history_list) == 1
@@ -122,10 +138,10 @@ def test_add_and_get_draw_history(client, auth_headers):
 
 def test_get_list_members(client, auth_headers):
     # Cria lista
-    client.post("/lists/", json={"name": "Amigos do Cinema", "code": "MBR01"}, headers=auth_headers)
+    code = create_list(client, auth_headers, "Amigos do Cinema")["code"]
 
     # Consulta membros da lista
-    members_res = client.get("/lists/MBR01/members", headers=auth_headers)
+    members_res = client.get(f"/lists/{code}/members", headers=auth_headers)
     assert members_res.status_code == 200
     members = members_res.json()
     assert len(members) >= 1
@@ -144,23 +160,23 @@ def test_remove_list_member(client, auth_headers):
     headers2 = {"Authorization": f"Bearer {token2}"}
 
     # Cria lista com usuário 1
-    client.post("/lists/", json={"name": "Clube VIP", "code": "VIP01"}, headers=auth_headers)
+    code = create_list(client, auth_headers, "Clube VIP")["code"]
 
     # Usuário 2 entra na lista
-    join_res = client.post("/lists/join/VIP01", headers=headers2)
+    join_res = client.post(f"/lists/join/{code}", headers=headers2)
     assert join_res.status_code == 200
 
     # Verifica se há 2 membros
-    members_res = client.get("/lists/VIP01/members", headers=auth_headers)
+    members_res = client.get(f"/lists/{code}/members", headers=auth_headers)
     assert len(members_res.json()) == 2
     member2_id = next(m["id"] for m in members_res.json() if m["email"] == "member2@example.com")
 
     # Usuário 1 (dono) remove usuário 2
-    del_res = client.delete(f"/lists/VIP01/members/{member2_id}", headers=auth_headers)
+    del_res = client.delete(f"/lists/{code}/members/{member2_id}", headers=auth_headers)
     assert del_res.status_code == 200
 
     # Verifica se agora só restou 1 membro
-    members_after = client.get("/lists/VIP01/members", headers=auth_headers)
+    members_after = client.get(f"/lists/{code}/members", headers=auth_headers)
     assert len(members_after.json()) == 1
 
 def test_cleanup_old_draw_history(client, auth_headers, db_session):
@@ -168,8 +184,8 @@ def test_cleanup_old_draw_history(client, auth_headers, db_session):
     from models.models import DrawHistory, MovieList
 
     # Cria lista
-    client.post("/lists/", json={"name": "Histórico Antigo", "code": "CLN01"}, headers=auth_headers)
-    db_list = db_session.query(MovieList).filter(MovieList.code == "CLN01").first()
+    code = create_list(client, auth_headers, "Histórico Antigo")["code"]
+    db_list = db_session.query(MovieList).filter(MovieList.code == code).first()
 
     # Cria 1 registro recente (hoje) e 1 registro antigo (10 dias atrás)
     old_date = (datetime.now(timezone.utc) - timedelta(days=10)).isoformat()
@@ -191,24 +207,24 @@ def test_cleanup_old_draw_history(client, auth_headers, db_session):
     db_session.commit()
 
     # Confirma que há 2 itens no histórico
-    get_res = client.get("/lists/CLN01/history", headers=auth_headers)
+    get_res = client.get(f"/lists/{code}/history", headers=auth_headers)
     assert len(get_res.json()) == 2
 
-    # Executa limpeza de registros com mais de 7 dias
-    clean_res = client.delete("/lists/CLN01/history/cleanup?days=7", headers=auth_headers)
+    # Executa arquivamento de registros com mais de 7 dias
+    clean_res = client.delete(f"/lists/{code}/history/cleanup?days=7", headers=auth_headers)
     assert clean_res.status_code == 200
     assert clean_res.json()["deleted_count"] == 1
 
     # Confirma que só restou o registro recente
-    get_after = client.get("/lists/CLN01/history", headers=auth_headers)
+    get_after = client.get(f"/lists/{code}/history", headers=auth_headers)
     history_after = get_after.json()
     assert len(history_after) == 1
     assert history_after[0]["movie_title"] == "Interestelar Recente"
 
 def test_bola_unauthorized_movie_access_and_modification(client, auth_headers):
     # Usuário 1 (auth_headers) cria uma lista e adiciona um filme
-    client.post("/lists/", json={"name": "Lista Privada de A", "code": "PRIV01"}, headers=auth_headers)
-    add_res = client.post("/lists/PRIV01/movies", json={"title": "Matrix", "tmdbId": 603}, headers=auth_headers)
+    code = create_list(client, auth_headers, "Lista Privada de A")["code"]
+    add_res = client.post(f"/lists/{code}/movies", json={"title": "Matrix", "tmdbId": 603}, headers=auth_headers)
     assert add_res.status_code == 200
     movie_id = add_res.json()["id"]
 
@@ -223,11 +239,11 @@ def test_bola_unauthorized_movie_access_and_modification(client, auth_headers):
     attacker_headers = {"Authorization": f"Bearer {token2}"}
 
     # 1. Atacante tenta listar filmes da lista privada -> 403 Forbidden
-    res_get = client.get("/lists/PRIV01/movies", headers=attacker_headers)
+    res_get = client.get(f"/lists/{code}/movies", headers=attacker_headers)
     assert res_get.status_code == 403
 
     # 2. Atacante tenta adicionar filme na lista de A -> 403 Forbidden
-    res_add = client.post("/lists/PRIV01/movies", json={"title": "Invasor", "tmdbId": 999}, headers=attacker_headers)
+    res_add = client.post(f"/lists/{code}/movies", json={"title": "Invasor", "tmdbId": 999}, headers=attacker_headers)
     assert res_add.status_code == 403
 
     # 3. Atacante tenta marcar o filme de A como assistido -> 403 Forbidden
@@ -239,16 +255,16 @@ def test_bola_unauthorized_movie_access_and_modification(client, auth_headers):
     assert res_del.status_code == 403
 
     # 5. Atacante tenta listar membros da lista de A -> 403 Forbidden
-    res_members = client.get("/lists/PRIV01/members", headers=attacker_headers)
+    res_members = client.get(f"/lists/{code}/members", headers=attacker_headers)
     assert res_members.status_code == 403
 
     # 6. Atacante tenta ver o histórico da lista de A -> 403 Forbidden
-    res_history = client.get("/lists/PRIV01/history", headers=attacker_headers)
+    res_history = client.get(f"/lists/{code}/history", headers=attacker_headers)
     assert res_history.status_code == 403
 
 def test_websocket_authentication_and_authorization(client, auth_headers):
     # Usuário 1 cria uma lista
-    client.post("/lists/", json={"name": "Lista WebSocket", "code": "WS001"}, headers=auth_headers)
+    code = create_list(client, auth_headers, "Lista WebSocket")["code"]
 
     # Cria Usuário 2 (não membro)
     client.post("/auth/signup", json={"email": "ws_stranger@example.com", "password": "password123"})
@@ -264,30 +280,29 @@ def test_websocket_authentication_and_authorization(client, auth_headers):
     from starlette.websockets import WebSocketDisconnect
 
     with pytest.raises(Exception):
-        with client.websocket_connect("/lists/ws/WS001") as ws:
+        with client.websocket_connect(f"/lists/ws/{code}") as ws:
             pass
 
     # Conexão com token de usuário que não é membro -> deve falhar
     with pytest.raises(Exception):
-        with client.websocket_connect(f"/lists/ws/WS001?token={token2}") as ws:
+        with client.websocket_connect(f"/lists/ws/{code}?token={token2}") as ws:
             pass
 
     # Conexão com token válido do dono -> deve conectar com sucesso
-    ticket_res = client.post("/lists/WS001/ws-ticket", headers=auth_headers)
+    ticket_res = client.post(f"/lists/{code}/ws-ticket", headers=auth_headers)
     assert ticket_res.status_code == 200
     ticket = ticket_res.json()["ticket"]
-    with client.websocket_connect(f"/lists/ws/WS001?ticket={ticket}") as ws:
+    with client.websocket_connect(f"/lists/ws/{code}?ticket={ticket}") as ws:
         assert ws is not None
 
     # JWT não é aceito como mecanismo de autenticação do WebSocket.
     with pytest.raises(Exception):
-        with client.websocket_connect("/lists/ws/WS001?token=invalid"):
+        with client.websocket_connect(f"/lists/ws/{code}?token=invalid"):
             pass
 
 def test_delete_list_with_all_relationships(client, auth_headers):
     # 1. Cria lista
-    res_list = client.post("/lists/", json={"name": "Lista Completa Para Deletar", "code": "DELFULL01"}, headers=auth_headers)
-    assert res_list.status_code == 200
+    code = create_list(client, auth_headers, "Lista Completa Para Deletar")["code"]
 
     # 2. Adiciona participante/membro
     client.post("/auth/signup", json={"email": "member_del@example.com", "password": "password123"})
@@ -298,11 +313,11 @@ def test_delete_list_with_all_relationships(client, auth_headers):
     )
     member_token = login_member.json()["access_token"]
     member_headers = {"Authorization": f"Bearer {member_token}"}
-    client.post("/lists/join/DELFULL01", headers=member_headers)
+    client.post(f"/lists/join/{code}", headers=member_headers)
 
     # 3. Adiciona filme
     res_movie = client.post(
-        "/lists/DELFULL01/movies",
+        f"/lists/{code}/movies",
         json={"title": "O Poderoso Chefão", "tmdbId": 238, "releaseYear": "1972"},
         headers=auth_headers
     )
@@ -319,7 +334,7 @@ def test_delete_list_with_all_relationships(client, auth_headers):
 
     # 5. Registra sorteio no histórico
     res_hist = client.post(
-        "/lists/DELFULL01/history",
+        f"/lists/{code}/history",
         json={
             "movie_id": movie_id,
             "movie_title": "O Poderoso Chefão",
@@ -330,12 +345,12 @@ def test_delete_list_with_all_relationships(client, auth_headers):
     assert res_hist.status_code == 200
 
     # 6. Deleta a lista inteira (dono) -> deve deletar sem erro 500
-    del_list_res = client.delete("/lists/DELFULL01", headers=auth_headers)
+    del_list_res = client.delete(f"/lists/{code}", headers=auth_headers)
     assert del_list_res.status_code == 200
     assert del_list_res.json()["message"] == "Lista removida com sucesso"
 
     # 7. Verifica que a lista não existe mais
-    check_res = client.get("/lists/DELFULL01/movies", headers=auth_headers)
+    check_res = client.get(f"/lists/{code}/movies", headers=auth_headers)
     assert check_res.status_code == 404
 
 

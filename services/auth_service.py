@@ -1,5 +1,7 @@
 import re
 import secrets
+import hashlib
+from datetime import datetime, timedelta, timezone
 from fastapi import HTTPException, status
 from google.oauth2 import id_token
 from google.auth.transport import requests
@@ -15,6 +17,7 @@ from schemas.schemas import (
     DemoAuthRequest,
 )
 from utils.security import get_password_hash, verify_password, create_access_token
+from utils.password_reset import send_password_reset_email
 
 class AuthService:
     def __init__(self, db: Session):
@@ -51,6 +54,29 @@ class AuthService:
             "email": user.email,
             "user_id": user.id
         }
+
+    def request_password_reset(self, email: str) -> dict:
+        """Solicita recuperação sem revelar se o email está cadastrado."""
+        normalized_email = email.strip().lower()
+        user = self.user_repo.get_by_email(normalized_email)
+        if user:
+            raw_token = secrets.token_urlsafe(32)
+            token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+            expires_at = datetime.now(timezone.utc) + timedelta(minutes=30)
+            self.user_repo.create_password_reset_token(user, token_hash, expires_at)
+            send_password_reset_email(user.email, raw_token)
+        return {"detail": "Se o email estiver cadastrado, você receberá instruções para redefinir a senha."}
+
+    def reset_password(self, token: str, new_password: str) -> dict:
+        token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+        reset_token = self.user_repo.get_valid_password_reset_token(token_hash)
+        if not reset_token:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Token de recuperação inválido ou expirado.",
+            )
+        self.user_repo.consume_password_reset_token(reset_token, get_password_hash(new_password))
+        return {"detail": "Senha redefinida com sucesso. Faça login com a nova senha."}
 
     def _verify_google_credential(self, credential: str) -> tuple[str, str]:
         """Valida um ID token Google e retorna email normalizado e subject estável."""

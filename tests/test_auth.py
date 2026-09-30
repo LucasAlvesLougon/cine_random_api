@@ -343,3 +343,46 @@ def test_demo_login_works_only_when_explicitly_enabled(client, monkeypatch):
     assert response.json()["email"] == "demo@example.com"
 
 
+def test_password_reset_uses_single_use_expiring_token(client, monkeypatch):
+    captured = {}
+
+    def fake_delivery(email, token):
+        captured["email"] = email
+        captured["token"] = token
+
+    monkeypatch.setattr("services.auth_service.send_password_reset_email", fake_delivery)
+    signup = client.post("/auth/signup", json={"email": "reset@example.com", "password": "oldpassword123"})
+    assert signup.status_code == 201
+
+    request = client.post("/auth/password-reset/request", json={"email": "reset@example.com"})
+    assert request.status_code == 202
+    assert request.json()["detail"].startswith("Se o email")
+    assert captured["email"] == "reset@example.com"
+
+    confirm = client.post(
+        "/auth/password-reset/confirm",
+        json={"token": captured["token"], "new_password": "newpassword123"},
+    )
+    assert confirm.status_code == 200
+
+    login = client.post(
+        "/auth/login",
+        data={"username": "reset@example.com", "password": "newpassword123"},
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    assert login.status_code == 200
+
+    reused = client.post(
+        "/auth/password-reset/confirm",
+        json={"token": captured["token"], "new_password": "anotherpassword123"},
+    )
+    assert reused.status_code == 400
+
+
+def test_password_reset_does_not_reveal_unknown_email(client):
+    response = client.post("/auth/password-reset/request", json={"email": "unknown@example.com"})
+
+    assert response.status_code == 202
+    assert response.json()["detail"].startswith("Se o email")
+
+
