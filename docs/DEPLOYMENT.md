@@ -2,7 +2,7 @@
 
 ## Configuração obrigatória
 
-Em produção, configure `ENVIRONMENT=production`, `SECRET_KEY` aleatória com pelo menos 32 bytes, `GOOGLE_CLIENT_ID`, `FRONTEND_BASE_URL` e `DATABASE_URL`. O login demo permanece desabilitado. Para recuperação de senha, configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD` e `PASSWORD_RESET_FROM_EMAIL`; sem SMTP a API mantém resposta genérica, mas não consegue entregar o email. No frontend, configure `VITE_API_URL`, `VITE_GOOGLE_CLIENT_ID` e uma nova `VITE_TMDB_API_KEY`; as chaves antes versionadas devem ser rotacionadas nos respectivos provedores.
+Em produção, configure `ENVIRONMENT=production`, `SECRET_KEY` aleatória com pelo menos 32 bytes, `GOOGLE_CLIENT_ID`, `FRONTEND_BASE_URL`, `DATABASE_URL` e `TMDB_API_KEY` (ou `TMDB_API_READ_ACCESS_TOKEN`). O login demo permanece desabilitado. Para recuperação de senha, configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD` e `PASSWORD_RESET_FROM_EMAIL`; sem SMTP a API mantém resposta genérica, mas não consegue entregar o email. No frontend, configure somente `VITE_API_URL` e `VITE_GOOGLE_CLIENT_ID`; a credencial TMDB fica exclusivamente no backend.
 
 O deploy executa `alembic upgrade head` antes de iniciar a API. A migration `0001_baseline` adota automaticamente um banco completo já existente; ela interrompe o deploy se encontrar um schema parcial. Para rollback apenas da identidade Google:
 
@@ -42,3 +42,5 @@ Antes de alterar `DATABASE_URL` no Render, compare as contagens de `users`, `lis
 ## Limites de escala
 
 Cache, rate limiter e broadcast WebSocket ainda são locais ao processo. Mantenha uma instância. Antes de escalar horizontalmente, migre esses três estados para Redis compartilhado e pub/sub.
+
+O endpoint `/metrics` expõe contadores e duração acumulada em formato Prometheus. O middleware registra logs JSON com `request_id`, rota, status e duração, sem incluir tokens, senhas ou chaves. O workflow de monitoramento falha quando a API ou as métricas deixam de responder; habilite notificações de falha do GitHub Actions para receber alertas.

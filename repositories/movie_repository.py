@@ -1,5 +1,6 @@
 from typing import List, Optional
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from datetime import datetime, timezone, timedelta
 from models.models import Movie, MovieList, User, Comment, DrawHistory
@@ -90,6 +91,19 @@ class MovieRepository:
     def get_movie_by_id(self, movie_id: int) -> Optional[Movie]:
         """Busca um filme pelo id primário."""
         return self.db.query(Movie).filter(Movie.id == movie_id).first()
+
+    def get_movies_for_list(self, list_id: int, offset: int, limit: int) -> tuple[List[Movie], int]:
+        """Retorna uma janela ordenada de filmes e o total sem carregar a lista inteira."""
+        total = self.db.query(func.count(Movie.id)).filter(Movie.list_id == list_id).scalar() or 0
+        movies = (
+            self.db.query(Movie)
+            .filter(Movie.list_id == list_id)
+            .order_by(Movie.id.desc())
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
+        return movies, total
 
     def get_movie_in_list_by_tmdb_id(self, list_id: int, tmdb_id: int) -> Optional[Movie]:
         """Verifica se o filme já existe na lista especificada."""

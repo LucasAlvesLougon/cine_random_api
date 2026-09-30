@@ -81,6 +81,33 @@ def test_add_and_toggle_movie(client, auth_headers):
     movies_after_del = client.get(f"/lists/{code}/movies", headers=auth_headers).json()
     assert len(movies_after_del) == 0
 
+
+def test_movies_endpoint_supports_pagination(client, auth_headers):
+    code = create_list(client, auth_headers, "Lista Paginada")["code"]
+    for tmdb_id in (603, 27205, 550):
+        response = client.post(
+            f"/lists/{code}/movies",
+            json={"title": f"Filme {tmdb_id}", "tmdbId": tmdb_id},
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+
+    first_page = client.get(
+        f"/lists/{code}/movies?page=1&page_size=2",
+        headers=auth_headers,
+    )
+    assert first_page.status_code == 200
+    assert first_page.json()["total"] == 3
+    assert len(first_page.json()["items"]) == 2
+    assert first_page.json()["has_next"] is True
+
+    second_page = client.get(
+        f"/lists/{code}/movies?page=2&page_size=2",
+        headers=auth_headers,
+    )
+    assert len(second_page.json()["items"]) == 1
+    assert second_page.json()["has_next"] is False
+
 def test_add_comment_and_rating(client, auth_headers):
     # Cria lista e adiciona filme
     code = create_list(client, auth_headers, "Cinema Clube")["code"]

@@ -115,6 +115,14 @@ class MovieResponse(MovieBase):
     comments: List[CommentResponse] = []
     model_config = ConfigDict(from_attributes=True)
 
+
+class MoviePageResponse(BaseModel):
+    items: List[MovieResponse]
+    total: int
+    page: int
+    page_size: int
+    has_next: bool
+
 # --- HISTÓRICO DE SORTEIOS ---
 class DrawHistoryCreate(BaseModel):
     movie_id: Optional[int] = None

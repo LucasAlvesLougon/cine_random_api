@@ -20,6 +20,8 @@ O backend conta com comunicação bidirecional em tempo real via **WebSockets au
 * **WebSockets Autenticados:** Broadcast em tempo real por sala (`list_code`) com ticket efêmero no handshake; o JWT não é enviado na URL.
 * **PyJWT & Bcrypt:** Hashing seguro de senhas e geração de Bearer Tokens assinados.
 * **Google Auth:** Validação server-side de tokens Google Identity.
+* **TMDB Proxy:** O backend consulta o catálogo com credencial server-side; o navegador nunca recebe a chave.
+* **Observabilidade:** Logs estruturados com `X-Request-ID` e métricas Prometheus em `/metrics`.
 * **Astral uv:** Gerenciamento de dependências e ambientes virtuais ultrarrápido.
 * **Pytest & TestClient:** Suíte de testes automatizados com banco isolado em memória.
 
@@ -80,7 +82,7 @@ cine_random_api/
 | `DELETE` | `/lists/{code}` | `Bearer` | Remove a lista e todos os filmes associados (apenas proprietário). |
 | `GET` | `/lists/{code}/members` | `Bearer` | Retorna todos os membros participantes (protegido por BOLA). |
 | `DELETE` | `/lists/{code}/members/{user_id}` | `Bearer` | Remove participante (apenas dono ou o próprio usuário). |
-| `GET` | `/lists/{code}/movies` | `Bearer` | Retorna todos os filmes da lista (protegido por BOLA). |
+| `GET` | `/lists/{code}/movies` | `Bearer` | Retorna filmes; com `page` e `page_size`, devolve paginação e total (protegido por BOLA). |
 | `POST` | `/lists/{code}/movies` | `Bearer` | Adiciona um filme à lista evitando duplicatas. |
 | `POST` | `/lists/{code}/ws-ticket` | `Bearer` | Emite ticket efêmero para abrir WebSocket. |
 | `GET` | `/lists/{code}/invite` | `Bearer` | Retorna código e link de convite da lista. |
@@ -91,6 +93,16 @@ cine_random_api/
 | `POST` | `/lists/{code}/history` | `Bearer` | Registra novo sorteio (Roleta ou Descoberta) no histórico; registros antigos de Match continuam legíveis. |
 | `DELETE` | `/lists/{code}/history/cleanup` | `Bearer` | Arquiva sorteios antigos com mais de X dias (padrão: 30 dias). |
 | `WS` | `/lists/ws/{code}?ticket={ticket}` | `Ticket` | Conexão WebSocket para sincronização em tempo real. |
+
+### 🎬 Catálogo TMDB (`/tmdb`)
+
+| Método | Rota | Auth | Descrição |
+| :--- | :--- | :---: | :--- |
+| `GET` | `/tmdb/search?query=...` | `Bearer` | Pesquisa filmes sem expor a credencial TMDB. |
+| `GET` | `/tmdb/movie/{tmdb_id}` | `Bearer` | Consulta detalhes, vídeos, provedores e créditos. |
+| `GET` | `/tmdb/discover` | `Bearer` | Descobre filmes por gênero, década e página. |
+| `GET` | `/tmdb/popular` | `Bearer` | Fallback de filmes populares paginado. |
+| `GET` | `/metrics` | — | Métricas Prometheus básicas para monitoramento. |
 
 ---
 
@@ -129,7 +141,7 @@ uv run alembic upgrade head
 uv run uvicorn main:app --reload --port 8000
 
 # 3. Executar a suíte completa de testes com Pytest
-uv run pytest
+uv run pytest --cov=services --cov=routers --cov=utils --cov-fail-under=35
 ```
 
 Documentação OpenAPI interativa disponível em `http://localhost:8000/docs` e ReDoc em `http://localhost:8000/redoc`.
