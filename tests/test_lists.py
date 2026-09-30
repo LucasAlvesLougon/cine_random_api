@@ -77,8 +77,6 @@ def test_add_comment_and_rating(client, auth_headers):
 
     # Adiciona comentário com nota
     comment_payload = {
-        "user_id": "test@example.com",
-        "user_name": "Test User",
         "text": "Obra de arte do Christopher Nolan!",
         "rating": 5
     }
@@ -87,6 +85,8 @@ def test_add_comment_and_rating(client, auth_headers):
     comment_data = comment_res.json()
     assert comment_data["text"] == "Obra de arte do Christopher Nolan!"
     assert comment_data["rating"] == 5
+    assert comment_data["user_id"] == "1"
+    assert comment_data["user_name"] == "tester@example.com"
 
     # Verifica se o filme na lista traz o comentário
     movies_res = client.get("/lists/CLB01/movies", headers=auth_headers)
@@ -104,13 +104,13 @@ def test_add_and_get_draw_history(client, auth_headers):
         "movie_title": "Interestelar",
         "movie_poster": "https://image.tmdb.org/t/p/w500/interstellar.jpg",
         "draw_type": "roulette",
-        "drawn_by": "test@example.com"
     }
     post_res = client.post("/lists/PIP01/history", json=history_payload, headers=auth_headers)
     assert post_res.status_code == 200
     history_data = post_res.json()
     assert history_data["movie_title"] == "Interestelar"
     assert history_data["draw_type"] == "roulette"
+    assert history_data["drawn_by"] == "1"
     assert "drawn_at" in history_data
 
     # Consulta histórico
@@ -249,7 +249,6 @@ def test_bola_unauthorized_movie_access_and_modification(client, auth_headers):
 def test_websocket_authentication_and_authorization(client, auth_headers):
     # Usuário 1 cria uma lista
     client.post("/lists/", json={"name": "Lista WebSocket", "code": "WS001"}, headers=auth_headers)
-    token1 = auth_headers["Authorization"].split(" ")[1]
 
     # Cria Usuário 2 (não membro)
     client.post("/auth/signup", json={"email": "ws_stranger@example.com", "password": "password123"})
@@ -274,8 +273,16 @@ def test_websocket_authentication_and_authorization(client, auth_headers):
             pass
 
     # Conexão com token válido do dono -> deve conectar com sucesso
-    with client.websocket_connect(f"/lists/ws/WS001?token={token1}") as ws:
+    ticket_res = client.post("/lists/WS001/ws-ticket", headers=auth_headers)
+    assert ticket_res.status_code == 200
+    ticket = ticket_res.json()["ticket"]
+    with client.websocket_connect(f"/lists/ws/WS001?ticket={ticket}") as ws:
         assert ws is not None
+
+    # JWT não é aceito como mecanismo de autenticação do WebSocket.
+    with pytest.raises(Exception):
+        with client.websocket_connect("/lists/ws/WS001?token=invalid"):
+            pass
 
 def test_delete_list_with_all_relationships(client, auth_headers):
     # 1. Cria lista
@@ -305,7 +312,7 @@ def test_delete_list_with_all_relationships(client, auth_headers):
     # 4. Adiciona comentário no filme
     res_comm = client.post(
         f"/lists/movies/{movie_id}/comments",
-        json={"user_id": "1", "user_name": "Tester", "text": "Obra de arte absoluta!", "rating": 5},
+        json={"text": "Obra de arte absoluta!", "rating": 5},
         headers=auth_headers
     )
     assert res_comm.status_code == 200

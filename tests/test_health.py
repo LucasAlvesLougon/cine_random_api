@@ -18,6 +18,7 @@ def test_responses_include_security_headers(client):
     assert response.headers["x-frame-options"] == "DENY"
     assert response.headers["referrer-policy"] == "no-referrer"
     assert response.headers["permissions-policy"] == "camera=(), microphone=(), geolocation=()"
+    assert "default-src 'self'" in response.headers["content-security-policy"]
 
 
 def test_readiness_checks_database(client):

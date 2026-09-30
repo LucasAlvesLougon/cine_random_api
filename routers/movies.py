@@ -8,7 +8,7 @@ from models.models import User
 from schemas.schemas import (
     MovieCreate, MovieResponse, MovieListCreate,
     MovieListResponse, CommentCreate, CommentResponse,
-    DrawHistoryCreate, DrawHistoryResponse, MemberResponse
+    DrawHistoryCreate, DrawHistoryResponse, MemberResponse, WebSocketTicketResponse
 )
 from services.movie_service import MovieService
 from utils.security import get_current_user
@@ -63,6 +63,13 @@ def get_movies(list_code: str, db: Session = Depends(get_db), current_user: User
     service = MovieService(db)
     return service.get_movies(list_code, current_user)
 
+@router.post("/{list_code}/ws-ticket", response_model=WebSocketTicketResponse)
+def issue_websocket_ticket(list_code: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Emite um ticket curto para autenticar uma conexão WebSocket."""
+    service = MovieService(db)
+    ticket, expires_in = service.issue_websocket_ticket(list_code, current_user)
+    return {"ticket": ticket, "expires_in": expires_in}
+
 @router.post("/{list_code}/movies", response_model=MovieResponse)
 def add_movie(list_code: str, movie: MovieCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Adiciona um filme a uma lista (evitando duplicatas)."""
@@ -109,15 +116,15 @@ def cleanup_draw_history(list_code: str, days: int = 7, background_tasks: Backgr
 async def websocket_endpoint(
     websocket: WebSocket,
     list_code: str,
-    token: Optional[str] = Query(None),
+    ticket: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
-    if not token:
+    if not ticket:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
 
     service = MovieService(db)
-    if not service.can_connect_websocket(token, list_code):
+    if not service.can_connect_websocket(ticket, list_code):
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
 

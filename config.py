@@ -19,7 +19,7 @@ class Settings(BaseSettings):
         "https://cine-random.vercel.app",
         "https://cinerandomseven.vercel.app",
     ]
-    CORS_ORIGIN_REGEX: str = r"^https:\/\/.*\.vercel\.app$"
+    CORS_ORIGIN_REGEX: str = r"^https:\/\/(?:cine-random|cinerandomseven)(?:-[a-z0-9-]+)?\.vercel\.app$"
     GOOGLE_CLIENT_ID: str = ""
     UPSTASH_REDIS_REST_URL: str | None = None
     UPSTASH_REDIS_REST_TOKEN: str | None = None
@@ -33,6 +33,8 @@ class Settings(BaseSettings):
             raise ValueError("SECRET_KEY must be a strong, production-specific secret")
         if not self.GOOGLE_CLIENT_ID.strip():
             raise ValueError("GOOGLE_CLIENT_ID is required in production")
+        if self.ALLOW_DEMO_AUTH:
+            raise ValueError("ALLOW_DEMO_AUTH must be disabled in production")
         return self
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")

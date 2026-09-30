@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, Float, ForeignKey, JSON
+from sqlalchemy import Column, Integer, String, Boolean, Float, ForeignKey, JSON, UniqueConstraint
 from sqlalchemy.orm import relationship
 from database.connection import Base
 
@@ -8,7 +8,8 @@ user_lists_association = Table(
     'user_lists_association',
     Base.metadata,
     Column('user_id', Integer, ForeignKey('users.id'), index=True),
-    Column('list_id', Integer, ForeignKey('lists.id'), index=True)
+    Column('list_id', Integer, ForeignKey('lists.id'), index=True),
+    UniqueConstraint('user_id', 'list_id', name='uq_user_lists_user_list'),
 )
 class User(Base):
     __tablename__ = "users"
@@ -36,6 +37,9 @@ class MovieList(Base):
 
 class Movie(Base):
     __tablename__ = "movies"
+    __table_args__ = (
+        UniqueConstraint('list_id', 'tmdbId', name='uq_movies_list_tmdb'),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     list_id = Column(Integer, ForeignKey("lists.id"), index=True)

@@ -17,7 +17,7 @@ O backend conta com comunicação bidirecional em tempo real via **WebSockets au
 
 * **FastAPI:** Framework assíncrono moderno com validação automática via Pydantic v2 e OpenAPI/Swagger.
 * **SQLAlchemy 2.0:** Mapeamento objeto-relacional com suporte a PostgreSQL em produção e SQLite isolado em testes.
-* **WebSockets Autenticados:** Broadcast em tempo real por sala (`list_code`) com validação de token JWT no handshake.
+* **WebSockets Autenticados:** Broadcast em tempo real por sala (`list_code`) com ticket efêmero no handshake; o JWT não é enviado na URL.
 * **PyJWT & Bcrypt:** Hashing seguro de senhas e geração de Bearer Tokens assinados.
 * **Google Auth:** Validação server-side de tokens Google Identity.
 * **Astral uv:** Gerenciamento de dependências e ambientes virtuais ultrarrápido.
@@ -59,6 +59,7 @@ cine_random_api/
 | `POST` | `/auth/signup` | ❌ | 5 req/min | Criação de novo usuário com senha criptografada. |
 | `POST` | `/auth/login` | ❌ | 10 req/min | Login com email/senha e emissão do token JWT. |
 | `POST` | `/auth/google` | ❌ | 10 req/min | Autenticação com Google ID Token. |
+| `POST` | `/auth/google/confirm-link` | ❌ | 10 req/min | Confirma a vinculação Google com a senha local e autentica. |
 | `POST` | `/auth/demo` | ❌ | 10 req/min | Login simulado, somente quando habilitado em desenvolvimento. |
 
 ### 🩺 Saúde (`/health`)
@@ -79,13 +80,14 @@ cine_random_api/
 | `DELETE` | `/lists/{code}/members/{user_id}` | `Bearer` | Remove participante (apenas dono ou o próprio usuário). |
 | `GET` | `/lists/{code}/movies` | `Bearer` | Retorna todos os filmes da lista (protegido por BOLA). |
 | `POST` | `/lists/{code}/movies` | `Bearer` | Adiciona um filme à lista evitando duplicatas. |
+| `POST` | `/lists/{code}/ws-ticket` | `Bearer` | Emite ticket efêmero para abrir WebSocket. |
 | `PUT` | `/lists/movies/{id}/toggle-watched`| `Bearer` | Alterna o status de assistido do filme. |
 | `DELETE` | `/lists/movies/{id}` | `Bearer` | Remove um filme da lista (protegido por BOLA). |
 | `POST` | `/lists/movies/{id}/comments` | `Bearer` | Adiciona comentário/resenha ao filme. |
 | `GET` | `/lists/{code}/history` | `Bearer` | Consulta o histórico de sorteios da lista. |
 | `POST` | `/lists/{code}/history` | `Bearer` | Registra novo sorteio (Roleta ou Match) no histórico. |
 | `DELETE` | `/lists/{code}/history/cleanup` | `Bearer` | Exclui sorteios antigos com mais de X dias (padrão: 7 dias). |
-| `WS` | `/lists/ws/{code}?token={jwt}` | `JWT` | Conexão WebSocket para sincronização em tempo real. |
+| `WS` | `/lists/ws/{code}?ticket={ticket}` | `Ticket` | Conexão WebSocket para sincronização em tempo real. |
 
 ---
 
