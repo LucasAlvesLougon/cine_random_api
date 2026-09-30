@@ -34,17 +34,18 @@ def test_api_caching_and_invalidation(client, auth_headers):
     cache.clear()
     
     # 1. Cria lista
-    client.post(
+    create_response = client.post(
         "/lists/",
-        json={"name": "Lista Cache", "code": "CACHE01"},
+        json={"name": "Lista Cache"},
         headers=auth_headers
     )
+    code = create_response.json()["code"]
     
     # 2. Busca filmes (inicialmente vazia, grava em cache)
-    res1 = client.get("/lists/CACHE01/movies", headers=auth_headers)
+    res1 = client.get(f"/lists/{code}/movies", headers=auth_headers)
     assert res1.status_code == 200
     assert len(res1.json()) == 0
-    cache_key = "movies:CACHE01:1"
+    cache_key = f"movies:{code}:1"
     assert cache.get(cache_key) is not None
     
     # 3. Adiciona filme (invalida cache)
@@ -53,14 +54,14 @@ def test_api_caching_and_invalidation(client, auth_headers):
         "tmdbId": 238,
         "releaseYear": "1972"
     }
-    add_res = client.post("/lists/CACHE01/movies", json=movie_payload, headers=auth_headers)
+    add_res = client.post(f"/lists/{code}/movies", json=movie_payload, headers=auth_headers)
     assert add_res.status_code == 200
     
     # O cache deve ter sido invalidado
     assert cache.get(cache_key) is None
     
     # 4. Nova busca atualizada
-    res2 = client.get("/lists/CACHE01/movies", headers=auth_headers)
+    res2 = client.get(f"/lists/{code}/movies", headers=auth_headers)
     assert res2.status_code == 200
     assert len(res2.json()) == 1
     assert res2.json()[0]["title"] == "O Poderoso Chefão"

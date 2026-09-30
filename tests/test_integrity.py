@@ -1,7 +1,8 @@
 def test_comment_identity_cannot_be_supplied_by_client(client, auth_headers):
-    client.post("/lists/", json={"name": "Comentários", "code": "COM001"}, headers=auth_headers)
+    list_response = client.post("/lists/", json={"name": "Comentários"}, headers=auth_headers)
+    list_code = list_response.json()["code"]
     movie = client.post(
-        "/lists/COM001/movies",
+        f"/lists/{list_code}/movies",
         json={"title": "Matrix", "tmdbId": 603},
         headers=auth_headers,
     ).json()
@@ -37,9 +38,10 @@ def test_draw_history_identity_cannot_be_supplied_by_client(client, auth_headers
 
 
 def test_invalid_rating_is_rejected(client, auth_headers):
-    client.post("/lists/", json={"name": "Notas", "code": "RAT001"}, headers=auth_headers)
+    list_response = client.post("/lists/", json={"name": "Notas"}, headers=auth_headers)
+    list_code = list_response.json()["code"]
     movie = client.post(
-        "/lists/RAT001/movies",
+        f"/lists/{list_code}/movies",
         json={"title": "Matrix", "tmdbId": 603},
         headers=auth_headers,
     ).json()

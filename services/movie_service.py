@@ -7,7 +7,7 @@ from repositories.movie_repository import MovieRepository
 from repositories.user_repository import UserRepository
 from models.models import User, MovieList, Movie, Comment, DrawHistory
 from schemas.schemas import (
-    MovieListCreate,
+    MovieListCreate, MovieListUpdate,
     MovieListResponse,
     MovieCreate,
     MovieResponse,
@@ -18,6 +18,8 @@ from schemas.schemas import (
 from sockets import manager
 from utils.cache import cache
 from utils.websocket_auth import websocket_tickets
+from utils.invites import generate_invite_code
+from config import settings
 
 class MovieService:
     def __init__(self, db: Session):
@@ -59,6 +61,7 @@ class MovieService:
 
     def join_list(self, list_code: str, current_user: User) -> MovieList:
         """Entra em uma lista existente pelo código e invalida caches."""
+        list_code = list_code.strip().upper()
         db_list = self.movie_repo.get_list_by_code(list_code)
         if not db_list:
             raise HTTPException(
@@ -84,18 +87,23 @@ class MovieService:
 
     def create_list(self, lista: MovieListCreate, current_user: User) -> MovieList:
         """Cria uma nova lista para o usuário logado e invalida cache."""
-        db_list = self.movie_repo.get_list_by_code(lista.code)
-        if db_list:
+        code = None
+        for _ in range(5):
+            candidate = generate_invite_code()
+            if not self.movie_repo.get_list_by_code(candidate):
+                code = candidate
+                break
+        if code is None:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Código de lista já está em uso."
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Não foi possível gerar um convite exclusivo agora.",
             )
 
-        new_list = self.movie_repo.create_list(name=lista.name, code=lista.code, owner=current_user)
+        new_list = self.movie_repo.create_list(name=lista.name.strip(), code=code, owner=current_user)
         cache.delete(f"user_lists:{current_user.id}")
         return new_list
 
-    def update_list(self, list_code: str, list_data: MovieListCreate, current_user: User) -> MovieList:
+    def update_list(self, list_code: str, list_data: MovieListUpdate, current_user: User) -> MovieList:
         """Atualiza o nome da lista com validação de permissão e invalida cache."""
         db_list = self.movie_repo.get_list_by_code(list_code)
         if not db_list:
@@ -112,6 +120,14 @@ class MovieService:
         updated_list = self.movie_repo.update_list_name(db_list, list_data.name)
         cache.delete_prefix("user_lists:")
         return updated_list
+
+    def get_invite(self, list_code: str, current_user: User) -> dict:
+        db_list = self.movie_repo.get_list_by_code(list_code.strip().upper())
+        self._verify_list_access(db_list, current_user)
+        return {
+            "code": db_list.code,
+            "join_url": f"{settings.FRONTEND_BASE_URL.rstrip('/')}/join/{db_list.code}",
+        }
 
     def delete_list(self, list_code: str, current_user: User) -> dict:
         """Remove a lista e seus filmes (apenas dono) e limpa os caches."""
@@ -338,7 +354,8 @@ class MovieService:
         if background_tasks:
             background_tasks.add_task(manager.broadcast_refresh, list_code)
         return {
+            "archived_count": deleted_count,
             "deleted_count": deleted_count,
-            "message": f"{deleted_count} registros antigos removidos do histórico."
+            "message": f"{deleted_count} registros antigos foram arquivados e não serão apagados."
         }
 

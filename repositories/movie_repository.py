@@ -152,14 +152,18 @@ class MovieRepository:
 
     def get_draw_history(self, list_id: int, limit: int = 20) -> List[DrawHistory]:
         """Retorna o histórico dos últimos filmes sorteados da lista."""
-        return self.db.query(DrawHistory).filter(DrawHistory.list_id == list_id).order_by(DrawHistory.id.desc()).limit(limit).all()
+        return self.db.query(DrawHistory).filter(
+            DrawHistory.list_id == list_id,
+            DrawHistory.archived_at.is_(None),
+        ).order_by(DrawHistory.id.desc()).limit(limit).all()
 
     def cleanup_old_draw_history(self, list_id: int, days: int = 7) -> int:
         """Exclui registros de histórico de sorteios com mais de `days` dias."""
         cutoff_iso = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
-        deleted_count = self.db.query(DrawHistory).filter(
+        archived_count = self.db.query(DrawHistory).filter(
             DrawHistory.list_id == list_id,
-            DrawHistory.drawn_at < cutoff_iso
-        ).delete(synchronize_session=False)
+            DrawHistory.drawn_at < cutoff_iso,
+            DrawHistory.archived_at.is_(None),
+        ).update({"archived_at": datetime.now(timezone.utc)}, synchronize_session=False)
         self.db.commit()
-        return deleted_count
+        return archived_count

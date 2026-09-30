@@ -60,6 +60,8 @@ cine_random_api/
 | `POST` | `/auth/login` | ❌ | 10 req/min | Login com email/senha e emissão do token JWT. |
 | `POST` | `/auth/google` | ❌ | 10 req/min | Autenticação com Google ID Token. |
 | `POST` | `/auth/google/confirm-link` | ❌ | 10 req/min | Confirma a vinculação Google com a senha local e autentica. |
+| `POST` | `/auth/password-reset/request` | ❌ | 5 req/min | Solicita instruções de recuperação sem revelar se o email existe. |
+| `POST` | `/auth/password-reset/confirm` | ❌ | 5 req/min | Redefine a senha com token de uso único. |
 | `POST` | `/auth/demo` | ❌ | 10 req/min | Login simulado, somente quando habilitado em desenvolvimento. |
 
 ### 🩺 Saúde (`/health`)
@@ -81,12 +83,13 @@ cine_random_api/
 | `GET` | `/lists/{code}/movies` | `Bearer` | Retorna todos os filmes da lista (protegido por BOLA). |
 | `POST` | `/lists/{code}/movies` | `Bearer` | Adiciona um filme à lista evitando duplicatas. |
 | `POST` | `/lists/{code}/ws-ticket` | `Bearer` | Emite ticket efêmero para abrir WebSocket. |
+| `GET` | `/lists/{code}/invite` | `Bearer` | Retorna código e link de convite da lista. |
 | `PUT` | `/lists/movies/{id}/toggle-watched`| `Bearer` | Alterna o status de assistido do filme. |
 | `DELETE` | `/lists/movies/{id}` | `Bearer` | Remove um filme da lista (protegido por BOLA). |
 | `POST` | `/lists/movies/{id}/comments` | `Bearer` | Adiciona comentário/resenha ao filme. |
 | `GET` | `/lists/{code}/history` | `Bearer` | Consulta o histórico de sorteios da lista. |
-| `POST` | `/lists/{code}/history` | `Bearer` | Registra novo sorteio (Roleta ou Match) no histórico. |
-| `DELETE` | `/lists/{code}/history/cleanup` | `Bearer` | Exclui sorteios antigos com mais de X dias (padrão: 7 dias). |
+| `POST` | `/lists/{code}/history` | `Bearer` | Registra novo sorteio (Roleta ou Descoberta) no histórico; registros antigos de Match continuam legíveis. |
+| `DELETE` | `/lists/{code}/history/cleanup` | `Bearer` | Arquiva sorteios antigos com mais de X dias (padrão: 30 dias). |
 | `WS` | `/lists/ws/{code}?ticket={ticket}` | `Ticket` | Conexão WebSocket para sincronização em tempo real. |
 
 ---

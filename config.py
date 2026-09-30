@@ -21,6 +21,12 @@ class Settings(BaseSettings):
     ]
     CORS_ORIGIN_REGEX: str = r"^https:\/\/(?:cine-random|cinerandomseven)(?:-[a-z0-9-]+)?\.vercel\.app$"
     GOOGLE_CLIENT_ID: str = ""
+    FRONTEND_BASE_URL: str = "http://localhost:5173"
+    SMTP_HOST: str | None = None
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str | None = None
+    SMTP_PASSWORD: str | None = None
+    PASSWORD_RESET_FROM_EMAIL: str | None = None
     UPSTASH_REDIS_REST_URL: str | None = None
     UPSTASH_REDIS_REST_TOKEN: str | None = None
 

@@ -2,7 +2,7 @@
 
 ## Configuração obrigatória
 
-Em produção, configure `ENVIRONMENT=production`, `SECRET_KEY` aleatória com pelo menos 32 bytes, `GOOGLE_CLIENT_ID` e `DATABASE_URL`. O login demo permanece desabilitado. No frontend, configure `VITE_API_URL`, `VITE_GOOGLE_CLIENT_ID` e uma nova `VITE_TMDB_API_KEY`; as chaves antes versionadas devem ser rotacionadas nos respectivos provedores.
+Em produção, configure `ENVIRONMENT=production`, `SECRET_KEY` aleatória com pelo menos 32 bytes, `GOOGLE_CLIENT_ID`, `FRONTEND_BASE_URL` e `DATABASE_URL`. O login demo permanece desabilitado. Para recuperação de senha, configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD` e `PASSWORD_RESET_FROM_EMAIL`; sem SMTP a API mantém resposta genérica, mas não consegue entregar o email. No frontend, configure `VITE_API_URL`, `VITE_GOOGLE_CLIENT_ID` e uma nova `VITE_TMDB_API_KEY`; as chaves antes versionadas devem ser rotacionadas nos respectivos provedores.
 
 O deploy executa `alembic upgrade head` antes de iniciar a API. A migration `0001_baseline` adota automaticamente um banco completo já existente; ela interrompe o deploy se encontrar um schema parcial. Para rollback apenas da identidade Google:
 
